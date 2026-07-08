@@ -3,7 +3,36 @@ name: Run HKO Tracker
 on:
   repository_dispatch:
     types: [trigger-every-10-min]
-  workflow_dispatch: # Allows you to run it manually from the UI
+  workflow_dispatch:
+    inputs:
+      issue_custom:
+        description: 'Issue a Custom/Parody Warning?'
+        type: boolean
+        default: false
+      warning_type:
+        description: 'Custom Warning Type'
+        type: choice
+        options:
+          - None
+          - White Rainstorm Warning
+          - Blue Rainstorm Warning
+          - Red Rainstorm Watch
+          - Black Rainstorm Watch
+          - Severe Thunderstorm Emergency
+      valid_until:
+        description: 'Valid Until (e.g. 下午8:00 / 8:00 p.m.) (Blank for Watches/Emergency)'
+        type: string
+        required: false
+      area:
+        description: 'Area (Only for Severe Thunderstorm Emergency)'
+        type: choice
+        options:
+          - None
+          - Kowloon
+          - Outlying Islands
+          - West NT
+          - East NT
+          - HK Island
 
 permissions:
   contents: write
@@ -22,7 +51,6 @@ jobs:
       with:
         python-version: '3.10'
 
-    # Required for the Python script to draw Chinese characters on the image
     - name: Install System Fonts (for Image Generator)
       run: |
         sudo apt-get update
@@ -37,13 +65,16 @@ jobs:
         restore-keys: |
           hko-state-cache-
 
-    # Notice we added 'pillow' here for the image generation
     - name: Install Python Dependencies
       run: pip install requests pillow
 
     - name: Run script
       env:
         DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        CUSTOM_ISSUE: ${{ github.event.inputs.issue_custom }}
+        CUSTOM_TYPE: ${{ github.event.inputs.warning_type }}
+        CUSTOM_VALID_UNTIL: ${{ github.event.inputs.valid_until }}
+        CUSTOM_AREA: ${{ github.event.inputs.area }}
       run: python bot.py
 
     - name: Save Updated Warning State Cache
