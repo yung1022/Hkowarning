@@ -1,0 +1,45 @@
+name: Run HKO Tracker
+
+on:
+  schedule:
+    # Runs every 10 minutes (cron schedule)
+    - cron: '*/10 * * * *'
+  workflow_dispatch: # Allows you to run it manually from the UI
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out repository code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Restore Warning State Cache
+      id: state-cache
+      uses: actions/cache@v4
+      with:
+        path: warning_state.json
+        key: hko-state-cache-${{ github.run_id }}
+        restore-keys: |
+          hko-state-cache-
+
+    - name: Install dependencies
+      run: pip install requests
+
+    - name: Run script
+      env:
+        DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+      run: python bot.py
+
+    # Clean old caches and rewrite new ones to ensure we always fetch the *latest* update
+    - name: Save Updated Warning State Cache
+      uses: actions/cache/save@v4
+      if: always()
+      with:
+        path: warning_state.json
+        key: hko-state-cache-${{ github.run_id }}
