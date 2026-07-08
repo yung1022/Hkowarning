@@ -6,6 +6,9 @@ on:
     - cron: '*/10 * * * *'
   workflow_dispatch: # Allows you to run it manually from the UI
 
+permissions:
+  contents: write
+  actions: write
 jobs:
   run-bot:
     runs-on: ubuntu-latest
