@@ -5,22 +5,26 @@ on:
     types: [trigger-every-10-min]
   workflow_dispatch:
     inputs:
-      issue_custom:
-        description: 'Issue a Custom/Parody Warning?'
-        type: boolean
-        default: false
+      custom_action:
+        description: 'Action for Custom Warning'
+        type: choice
+        options:
+          - NONE (Run Auto Check Only)
+          - ISSUE
+          - EXTEND
+          - CANCEL
+        default: 'NONE (Run Auto Check Only)'
       warning_type:
         description: 'Custom Warning Type'
         type: choice
         options:
-          - None
           - White Rainstorm Warning
           - Blue Rainstorm Warning
           - Red Rainstorm Watch
           - Black Rainstorm Watch
           - Severe Thunderstorm Emergency
       valid_until:
-        description: 'Valid Until (e.g. 下午8:00 / 8:00 p.m.) (Blank for Watches/Emergency)'
+        description: 'Valid Until Time (24h format, e.g., 19:30 or 08:15) - Ignored for Watches/Emergency'
         type: string
         required: false
       area:
@@ -71,7 +75,7 @@ jobs:
     - name: Run script
       env:
         DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-        CUSTOM_ISSUE: ${{ github.event.inputs.issue_custom }}
+        CUSTOM_ACTION: ${{ github.event.inputs.custom_action }}
         CUSTOM_TYPE: ${{ github.event.inputs.warning_type }}
         CUSTOM_VALID_UNTIL: ${{ github.event.inputs.valid_until }}
         CUSTOM_AREA: ${{ github.event.inputs.area }}
