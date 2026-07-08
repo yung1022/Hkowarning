@@ -1,5 +1,4 @@
 import os
-import sys
 import json
 import requests
 from datetime import datetime
@@ -11,6 +10,11 @@ HKO_EN_URL = 'https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataTy
 HKO_TC_URL = 'https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=tc'
 STATE_FILE = 'warning_state.json'
 IMAGE_FILE = 'current_warnings.png'
+
+AREA_MAP = {
+    'Kowloon': '九龍', 'Outlying Islands': '離島',
+    'West NT': '新界西', 'East NT': '新界東', 'HK Island': '香港島'
+}
 
 def parse_time(iso_str):
     if not iso_str: return None
@@ -31,204 +35,225 @@ def format_en_time(dt):
 
 def format_en_full(dt):
     if not dt: return ""
-    date_str = dt.strftime("%d %b %Y")
-    return f"{date_str} {format_en_time(dt)}"
+    return f"{dt.strftime('%d %b %Y')} {format_en_time(dt)}"
 
-def load_previous_state():
+def parse_custom_target_time(time_str):
+    """Parses standard HH:MM input into a full datetime object for today."""
+    if not time_str or ":" not in time_str:
+        return None
+    try:
+        now = datetime.now(ZoneInfo("Asia/Hong_Kong"))
+        parts = time_str.strip().split(":")
+        return now.replace(hour=int(parts[0]), minute=int(parts[1]), second=0, microsecond=0)
+    except Exception:
+        return None
+
+def get_warning_identifiers(w_type, area="None"):
+    """Returns bilingual names for custom warnings."""
+    if w_type == 'White Rainstorm Warning': return "白色暴雨警告信號", w_type
+    if w_type == 'Blue Rainstorm Warning': return "藍色暴雨警告信號", w_type
+    if w_type == 'Red Rainstorm Watch': return "紅色暴雨戒備信號", w_type
+    if w_type == 'Black Rainstorm Watch': return "黑色暴雨戒備信號", w_type
+    if w_type == 'Severe Thunderstorm Emergency':
+        zh_a = AREA_MAP.get(area, area)
+        return f"{zh_a}嚴重雷暴緊急警告", f"Severe Thunderstorm Emergency Warning for {area}"
+    return "未知警告", w_type
+
+def load_state():
+    """Safely loads state, preserving backward compatibility with older formats."""
     if os.path.exists(STATE_FILE):
         try:
             with open(STATE_FILE, 'r') as f:
-                return json.load(f)
+                data = json.load(f)
+                if isinstance(data, dict) and ("official" in data or "custom" in data):
+                    return data.get("official", {}), data.get("custom", None)
+                return data, None
         except Exception: pass
-    return {}
+    return {}, None
 
-def save_current_state(state):
+def save_state(official, custom):
     with open(STATE_FILE, 'w') as f:
-        json.dump(state, f)
+        json.dump({"official": official, "custom": custom}, f)
 
-def generate_status_image(current_en, current_tc, custom_warn=None):
-    warn_count = len(current_en) + (1 if custom_warn else 0)
+def generate_status_image(official_en, official_tc, custom_warn):
+    # Dynamic structural spacing configuration
     width = 800
-    height = 120 + (max(1, warn_count) * 90)
+    off_count = len(official_en)
+    height = 60 + 50 + (off_count * 90 if off_count else 50) + 50 + (90 if custom_warn else 50) + 20
+    
     img = Image.new('RGB', (width, height), color=(43, 45, 49))
     draw = ImageDraw.Draw(img)
     
     try:
         font_path = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
-        font_title = ImageFont.truetype(font_path, 28)
-        font_body = ImageFont.truetype(font_path, 24)
-        font_detail = ImageFont.truetype(font_path, 18)
+        font_title = ImageFont.truetype(font_path, 26)
+        font_sec = ImageFont.truetype(font_path, 22)
+        font_body = ImageFont.truetype(font_path, 20)
+        font_detail = ImageFont.truetype(font_path, 16)
     except IOError:
-        font_title = font_body = font_detail = ImageFont.load_default()
+        font_title = font_sec = font_body = font_detail = ImageFont.load_default()
 
+    # Base Header Banner
     draw.rectangle([0, 0, width, 60], fill=(30, 31, 34))
     now_str = datetime.now(ZoneInfo("Asia/Hong_Kong")).strftime("%Y-%m-%d %H:%M:%S HKT")
-    draw.text((20, 15), f"HKO Warnings Summary / 現正生效警告 ({now_str})", font=font_title, fill=(255, 255, 255))
+    draw.text((20, 15), f"HKO Weather Monitoring Board ({now_str})", font=font_title, fill=(255, 255, 255))
 
-    y_offset = 80
-    if not current_en and not custom_warn:
-        draw.text((20, y_offset), "No warnings currently in force / 現時沒有生效警告", font=font_body, fill=(170, 170, 170))
+    y = 80
+    # --- SECTION 1: OFFICIAL WARNINGS ---
+    draw.text((20, y), "Official Warnings / 官方警告", font=font_sec, fill=(114, 137, 218))
+    y += 35
+    if not official_en:
+        draw.text((40, y), "No official warnings in force / 現時沒有官方生效警告", font=font_body, fill=(150, 150, 150))
+        y += 40
     else:
-        # Draw custom/parody warning first if it exists (highlighted in purple)
-        if custom_warn:
-            draw.text((20, y_offset), f"⚠️ [CUSTOM] {custom_warn['zh']} | {custom_warn['en']}", font=font_body, fill=(200, 100, 255))
-            detail_line = f"Issued: {custom_warn['issue']}"
-            if custom_warn.get('expire'):
-                detail_line += f" | Valid until: {custom_warn['expire']}"
-            draw.text((60, y_offset + 35), detail_line, font=font_detail, fill=(180, 180, 180))
-            y_offset += 90
-
-        # Draw official active warnings
-        for code, en_warn in current_en.items():
-            tc_warn = current_tc.get(code, {})
-            zh_name = tc_warn.get('name', en_warn.get('name'))
-            en_name = en_warn.get('name')
-            
-            draw.text((20, y_offset), f"⚠️ {zh_name} | {en_name}", font=font_body, fill=(255, 100, 100))
-            
-            issue_time = format_en_time(parse_time(en_warn.get('issueTime')))
-            detail_line = f"Issued: {issue_time}"
+        for code, en_warn in official_en.items():
+            zh_name = official_tc.get(code, {}).get('name', en_warn.get('name'))
+            draw.text((40, y), f"⚠️ {zh_name} | {en_warn.get('name')}", font=font_body, fill=(255, 100, 100))
+            detail = f"Issued: {format_en_time(parse_time(en_warn.get('issueTime')))}"
             if en_warn.get('expireTime'):
-                exp_time = format_en_time(parse_time(en_warn.get('expireTime')))
-                detail_line += f" | Valid until: {exp_time}"
-                
-            draw.text((60, y_offset + 35), detail_line, font=font_detail, fill=(180, 180, 180))
-            y_offset += 90
-            
+                detail += f" | Valid until: {format_en_time(parse_time(en_warn.get('expireTime')))}"
+            draw.text((75, y + 30), detail, font=font_detail, fill=(180, 180, 180))
+            y += 85
+
+    # --- SECTION 2: UNOFFICIAL WARNINGS ---
+    y += 15
+    draw.text((20, y), "Unofficial Parody Warnings / 非官方警告", font=font_sec, fill=(155, 89, 182))
+    y += 35
+    if not custom_warn:
+        draw.text((40, y), "No custom warnings active / 現時沒有非官方警告", font=font_body, fill=(150, 150, 150))
+    else:
+        zh_n, en_n = get_warning_identifiers(custom_warn['type'], custom_warn.get('area', 'None'))
+        draw.text((40, y), f"🔮 {zh_n} | {en_n}", font=font_body, fill=(200, 120, 255))
+        
+        iss_dt = parse_time(custom_warn.get('issueTime'))
+        detail = f"Issued: {format_en_time(iss_dt)}"
+        if custom_warn.get('expireTime'):
+            exp_dt = parse_time(custom_warn.get('expireTime'))
+            detail += f" | Valid until: {format_en_time(exp_dt)}"
+        draw.text((75, y + 30), detail, font=font_detail, fill=(180, 180, 180))
+
     img.save(IMAGE_FILE)
 
-def post_to_discord(messages, image_path):
-    discord_payload = {"content": "\n\n".join(messages)}
-    with open(image_path, "rb") as f:
-        webhook_response = requests.post(
-            WEBHOOK_URL,
-            data={"payload_json": json.dumps(discord_payload)},
-            files={"file": ("current_warnings.png", f, "image/png")}
-        )
-    return webhook_response.status_code
+def post_to_discord(messages, official_en, official_tc, custom):
+    if not messages: return
+    generate_status_image(official_en, official_tc, custom)
+    payload = {"content": "\n\n".join(messages)}
+    with open(IMAGE_FILE, "rb") as f:
+        requests.post(WEBHOOK_URL, data={"payload_json": json.dumps(payload)}, files={"file": (IMAGE_FILE, f, "image/png")})
 
-def handle_custom_warning():
-    w_type = os.environ.get('CUSTOM_TYPE', 'None')
-    valid_until = os.environ.get('CUSTOM_VALID_UNTIL', '').strip()
-    area = os.environ.get('CUSTOM_AREA', 'None')
-
+def main():
+    if not WEBHOOK_URL: return
+    
+    action = os.environ.get('CUSTOM_ACTION', 'NONE').split()[0]
+    c_type = os.environ.get('CUSTOM_TYPE', '')
+    v_until = os.environ.get('CUSTOM_VALID_UNTIL', '')
+    c_area = os.environ.get('CUSTOM_AREA', 'None')
+    
     now = datetime.now(ZoneInfo("Asia/Hong_Kong"))
-    zh_issue = format_zh_time(now)
-    en_issue = format_en_time(now)
-
-    area_map = {
-        'Kowloon': '九龍',
-        'Outlying Islands': '離島',
-        'West NT': '新界西',
-        'East NT': '新界東',
-        'HK Island': '香港島'
-    }
-
+    official_en = requests.get(HKO_EN_URL).json() or {}
+    official_tc = requests.get(HKO_TC_URL).json() or {}
+    prev_official, current_custom = load_state()
+    
     messages = []
-    custom_warn_visual = None
 
-    if w_type in ['White Rainstorm Warning', 'Blue Rainstorm Warning']:
-        zh_name = "白色暴雨警告信號" if "White" in w_type else "藍色暴雨警告信號"
-        if not valid_until: valid_until = "[Time not specified]"
-        messages.append(f"{zh_name} 在 {zh_issue}發出，有效時間至{valid_until}。\n{w_type} has been issued at {en_issue}, and is valid until {valid_until}.")
-        custom_warn_visual = {"zh": zh_name, "en": w_type, "issue": en_issue, "expire": valid_until}
+    # -------------------------------------------------------------
+    # PHASE 1: MANUALLY TRIGGERED CUSTOM ACTIONS VIA USER GRAPHICAL TAB
+    # -------------------------------------------------------------
+    if action in ['ISSUE', 'EXTEND', 'CANCEL']:
+        zh_name, en_name = get_warning_identifiers(c_type, c_area)
+        target_expire_dt = parse_custom_target_time(v_until)
         
-    elif w_type in ['Red Rainstorm Watch', 'Black Rainstorm Watch']:
-        zh_name = "紅色暴雨戒備信號" if "Red" in w_type else "黑色暴雨戒備信號"
-        messages.append(f"{zh_name} 在 {zh_issue}發出。\n{w_type} has been issued at {en_issue}.")
-        custom_warn_visual = {"zh": zh_name, "en": w_type, "issue": en_issue, "expire": None}
-        
-    elif w_type == 'Severe Thunderstorm Emergency':
-        zh_area = area_map.get(area, area)
-        zh_name = f"{zh_area}嚴重雷暴緊急警告"
-        en_name = f"Severe Thunderstorm Emergency Warning for {area}"
-        messages.append(f"{zh_name} 在 {zh_issue}發出。\n{en_name} has been issued at {en_issue}.")
-        custom_warn_visual = {"zh": zh_name, "en": en_name, "issue": en_issue, "expire": None}
+        if action == 'ISSUE':
+            # Rule 3.1: Only one active custom rainstorm warning can exist at a time
+            if current_custom and "Rainstorm Warning" in current_custom['type'] and "Rainstorm Warning" in c_type:
+                old_zh, old_en = get_warning_identifiers(current_custom['type'], current_custom.get('area', 'None'))
+                messages.append(f"🔄 {old_zh} 在{format_zh_time(now)}取消並被替代。\n{old_en} has been replaced and cancelled at {format_en_time(now)}.")
+            
+            # Setup base configurations
+            new_custom = {
+                "type": c_type, "area": c_area,
+                "issueTime": now.isoformat(),
+                "expireTime": target_expire_dt.isoformat() if target_expire_dt and "Watch" not in c_type and "Emergency" not in c_type else None
+            }
+            
+            if new_custom["expireTime"]:
+                messages.append(f"{zh_name} 在 {format_zh_time(now)}發出，有效時間至{format_zh_time(target_expire_dt)}。\n{en_name} has been issued at {format_en_time(now)}, and is valid until {format_en_time(target_expire_dt)}.")
+            else:
+                messages.append(f"{zh_name} 在 {format_zh_time(now)}發出。\n{en_name} has been issued at {format_en_time(now)}.")
+            current_custom = new_custom
 
-    # Fetch live warnings to append to the custom status image
-    data_en = requests.get(HKO_EN_URL).json() or {}
-    data_tc = requests.get(HKO_TC_URL).json() or {}
+        elif action == 'EXTEND' and current_custom and current_custom['type'] == c_type:
+            if target_expire_dt:
+                current_custom['expireTime'] = target_expire_dt.isoformat()
+                orig_issue_dt = parse_time(current_custom['issueTime'])
+                messages.append(f"{zh_name} 有效時間延長至{format_zh_time(target_expire_dt)}。\n{en_name} issued at {format_en_full(orig_issue_dt)} has been extended until {format_en_time(target_expire_dt)}.")
+
+        elif action == 'CANCEL' and current_custom and current_custom['type'] == c_type:
+            messages.append(f"{zh_name} 在{format_zh_time(now)}取消。\n{en_name} has been cancelled at {format_en_time(now)}.")
+            current_custom = None
+
+    # -------------------------------------------------------------
+    # PHASE 2: AUTOMATED RULE TASKS (RUNS EVERY 10 MINS)
+    # -------------------------------------------------------------
+    else:
+        # Check natural safety structural timeout thresholds
+        if current_custom and current_custom.get('expireTime'):
+            if now >= parse_time(current_custom['expireTime']):
+                zh_n, en_n = get_warning_identifiers(current_custom['type'], current_custom.get('area', 'None'))
+                messages.append(f"{zh_n} 有效時間在 {format_zh_time(parse_time(current_custom['expireTime']))} 終止。\n{en_n} has expired natively at {format_en_time(parse_time(current_custom['expireTime']))}.")
+                current_custom = None
+
+        # Rule 3.2: Automated watch termination rules based on active HKO tracking arrays
+        if current_custom and "Watch" in current_custom['type']:
+            is_official_red_active = ("WRAIN" in official_en and official_en["WRAIN"].get("type") == "Red")
+            is_official_blk_active = ("WRAIN" in official_en and official_en["WRAIN"].get("type") == "Black")
+            
+            if (current_custom['type'] == 'Red Rainstorm Watch' and is_official_red_active) or \
+               (current_custom['type'] == 'Black Rainstorm Watch' and is_official_blk_active):
+                zh_n, en_n = get_warning_identifiers(current_custom['type'])
+                messages.append(f"🛑 {zh_n} 因應天文台正式發出相應暴雨警告，在{format_zh_time(now)}自動取消。\n{en_n} has been automatically tracking-cancelled at {format_en_time(now)} due to official HKO upgrade release.")
+                current_custom = None
+
+        # Process Standard Official HKO Array Structural Diff Loops
+        for code, en_warn in official_en.items():
+            prev_w = prev_official.get(code, {})
+            if not prev_w or en_warn.get('updateTime') != prev_w.get('updateTime'):
+                zh_n = official_tc.get(code, {}).get('name', en_warn.get('name'))
+                en_n = en_warn.get('name')
+                iss_t = parse_time(en_warn.get('issueTime'))
+                exp_t = parse_time(en_warn.get('expireTime'))
+                
+                if code == "WTS":
+                    if en_warn.get('actionCode') == "EXTEND":
+                        messages.append(f"{zh_n} 有效時間延長至{format_zh_time(exp_t)}。\n{en_n} issued at {format_en_full(iss_t)} has been extended until {format_en_time(exp_t)}.")
+                    else:
+                        messages.append(f"{zh_n} 在 {format_zh_time(iss_t)}發出，有效時間至{format_zh_time(exp_t)}。\n{en_n} has been issued at {format_en_time(iss_t)}, and is valid until {format_en_time(exp_t)}.")
+                else:
+                    messages.append(f"{zh_n} 在 {format_zh_time(iss_t)}發出。\n{en_n} has been issued at {format_en_time(iss_t)}.")
+
+        for code, prev_w in prev_official.items():
+            if code not in official_en:
+                zh_n = prev_w.get('tc_name', prev_w.get('name'))
+                en_n = prev_w.get('name')
+                if code == "WTS":
+                    exp_t = parse_time(prev_w.get('expireTime'))
+                    t_str = format_zh_time(exp_t) if exp_t else format_zh_time(now)
+                    messages.append(f"雷暴警告有效時間在{t_str}終止。\n{en_n} has been cancelled at {format_en_time(now)}.")
+                else:
+                    messages.append(f"{zh_n} 在{format_zh_time(now)}取消。\n{en_n} has been cancelled at {format_en_time(now)}.")
+
+    # -------------------------------------------------------------
+    # PHASE 3: STATE SYNCHRONIZATION AND DISCORD DELIVERY
+    # -------------------------------------------------------------
+    next_official_state = {}
+    for k, v in official_en.items():
+        v_copy = dict(v)
+        v_copy['tc_name'] = official_tc.get(k, {}).get('name', v.get('name'))
+        next_official_state[k] = v_copy
 
     if messages:
-        generate_status_image(data_en, data_tc, custom_warn=custom_warn_visual)
-        status = post_to_discord(messages, IMAGE_FILE)
-        print(f"Custom warning deployed. Status: {status}")
-
-def fetch_and_send_warnings():
-    if not WEBHOOK_URL:
-        print("Missing DISCORD_WEBHOOK_URL")
-        return
-
-    # 1. Check if this is a manual custom warning run
-    if os.environ.get('CUSTOM_ISSUE') == 'true':
-        handle_custom_warning()
-        return
-
-    # 2. Otherwise, proceed with normal automated HKO tracking
-    try:
-        data_en = requests.get(HKO_EN_URL).json() or {}
-        data_tc = requests.get(HKO_TC_URL).json() or {}
-        previous_state = load_previous_state()
-        
-        messages = []
-        now = datetime.now(ZoneInfo("Asia/Hong_Kong"))
-        zh_cancel_time = format_zh_time(now)
-        en_cancel_time = format_en_time(now)
-        
-        for code, en_warn in data_en.items():
-            tc_warn = data_tc.get(code, {})
-            prev_warn = previous_state.get(code, {})
-            
-            if not prev_warn or en_warn.get('updateTime') != prev_warn.get('updateTime'):
-                zh_name = tc_warn.get('name', en_warn.get('name', 'Unknown'))
-                en_name = en_warn.get('name', 'Unknown')
-                issue_dt = parse_time(en_warn.get('issueTime'))
-                expire_dt = parse_time(en_warn.get('expireTime'))
-                
-                zh_issue = format_zh_time(issue_dt)
-                en_issue = format_en_time(issue_dt)
-                en_issue_full = format_en_full(issue_dt)
-                zh_expire = format_zh_time(expire_dt)
-                en_expire = format_en_time(expire_dt)
-                action = en_warn.get('actionCode', 'ISSUE')
-
-                if code == "WTS":
-                    if action == "EXTEND":
-                        messages.append(f"{zh_name} 有效時間延長至{zh_expire}。\n{en_name} issued at {en_issue_full} has been extended until {en_expire}.")
-                    else:
-                        messages.append(f"{zh_name} 在 {zh_issue}發出，有效時間至{zh_expire}。\n{en_name} has been issued at {en_issue}, and is valid until {en_expire}.")
-                else:
-                    messages.append(f"{zh_name} 在 {zh_issue}發出。\n{en_name} has been issued at {en_issue}.")
-
-        for code, prev_warn in previous_state.items():
-            if code not in data_en:
-                zh_name = prev_warn.get('tc_name', prev_warn.get('name', 'Unknown'))
-                en_name = prev_warn.get('name', 'Unknown')
-                
-                if code == "WTS":
-                    expire_dt = parse_time(prev_warn.get('expireTime'))
-                    zh_expire_or_cancel = format_zh_time(expire_dt) if expire_dt else zh_cancel_time
-                    messages.append(f"雷暴警告有效時間在{zh_expire_or_cancel}終止。\n{en_name} has been cancelled at {en_cancel_time}.")
-                else:
-                    messages.append(f"{zh_name} 在{zh_cancel_time}取消。\n{en_name} has been cancelled at {en_cancel_time}.")
-
-        state_to_save = {}
-        for k, v in data_en.items():
-            v_copy = dict(v)
-            v_copy['tc_name'] = data_tc.get(k, {}).get('name', v.get('name'))
-            state_to_save[k] = v_copy
-            
-        save_current_state(state_to_save)
-
-        if messages:
-            generate_status_image(data_en, data_tc)
-            status = post_to_discord(messages, IMAGE_FILE)
-            print(f"Automated check deployed. Status: {status}")
-        else:
-            print("No new updates. Sleeping peacefully.")
-
-    except Exception as e:
-        print(f"An error occurred: {e}")
+        post_to_discord(messages, official_en, official_tc, current_custom)
+    save_state(next_official_state, current_custom)
 
 if __name__ == "__main__":
-    fetch_and_send_warnings()
+    main()
