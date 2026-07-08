@@ -28,15 +28,13 @@ on:
         type: string
         required: false
       area:
-        description: 'Area (For Emergency)'
-        type: choice
-        options:
-          - None
-          - Kowloon
-          - Outlying Islands
-          - West NT
-          - East NT
-          - HK Island
+        description: 'Area(s) for Emergency (Comma separated, e.g., Kowloon, West NT)'
+        type: string
+        required: false
+      announcement:
+        description: 'Custom Announcement Text (Leave blank for default templates)'
+        type: string
+        required: false
       red_chance:
         description: 'Red Rainstorm Chance (e.g., 40%. Type CLEAR to remove)'
         type: string
@@ -80,6 +78,7 @@ jobs:
         CUSTOM_TYPE: ${{ github.event.inputs.warning_type }}
         CUSTOM_VALID_UNTIL: ${{ github.event.inputs.valid_until }}
         CUSTOM_AREA: ${{ github.event.inputs.area }}
+        CUSTOM_ANNOUNCEMENT: ${{ github.event.inputs.announcement }}
         RED_CHANCE: ${{ github.event.inputs.red_chance }}
         BLACK_CHANCE: ${{ github.event.inputs.black_chance }}
       run: python bot.py
