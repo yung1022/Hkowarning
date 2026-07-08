@@ -24,6 +24,27 @@ UNOFFICIAL_ASSETS = {
     'Severe Thunderstorm Emergency': 'severe_thunderstorm'
 }
 
+def translate_areas(area_str):
+    if not area_str or str(area_str).strip().lower() == 'none':
+        return 'None', 'None'
+    # Split by comma to support multiple districts
+    areas = [a.strip() for a in area_str.split(',')]
+    zh_areas = [AREA_MAP.get(a, a) for a in areas]
+    return "及".join(zh_areas), " and ".join(areas)
+
+def get_template_announcement(w_type, en_area):
+    if w_type == 'White Rainstorm Warning':
+        return "1. Expect heavy rain of about 10mm/h to form over the next 2-3 hours.\n2. About 10mm/h of heavy rain is currently impacting on most parts of Hong Kong."
+    elif w_type == 'Blue Rainstorm Warning':
+        return "1. Expect heavy rain of about 30mm/h to form over the next 2-3 hours.\n2. About 20mm/h of heavy rain is currently impacting on most parts of Hong Kong."
+    elif w_type == 'Red Rainstorm Watch':
+        return "The chance of issuing Red Rainstorm Warning has reached more than 70%, it is very likely that a 50mm/h heavy rain will impact Hong Kong very soon."
+    elif w_type == 'Black Rainstorm Watch':
+        return "The chance of issuing Black Rainstorm Warning has reached more than 70%, it is very likely that a 70mm/h heavy rain will impact Hong Kong very soon."
+    elif w_type == 'Severe Thunderstorm Emergency':
+        return f"There's currently a huge thunderstorm on {en_area}."
+    return ""
+
 def parse_time(iso_str):
     if not iso_str: return None
     return datetime.fromisoformat(iso_str)
@@ -57,8 +78,8 @@ def get_warning_identifiers(w_type, area="None"):
     if w_type == 'Red Rainstorm Watch': return "紅色暴雨戒備信號", w_type
     if w_type == 'Black Rainstorm Watch': return "黑色暴雨戒備信號", w_type
     if w_type == 'Severe Thunderstorm Emergency':
-        zh_a = AREA_MAP.get(area, area)
-        return f"{zh_a}嚴重雷暴緊急警告", f"Severe Thunderstorm Emergency Warning for {area}"
+        zh_a, en_a = translate_areas(area)
+        return f"{zh_a}嚴重雷暴緊急警告", f"Severe Thunderstorm Emergency Warning for {en_a}"
     return "未知警告", w_type
 
 def load_state():
@@ -83,7 +104,6 @@ def paste_icon(img, folder, filename, x, y):
     return False
 
 def generate_status_image(official_en, official_tc, custom_warn, chances):
-    # Determine Rainstorm Level for Chance Display Rules
     rs_level = 0
     if "WRAIN" in official_en:
         code = official_en["WRAIN"].get("code", "")
@@ -91,11 +111,9 @@ def generate_status_image(official_en, official_tc, custom_warn, chances):
         elif "R" in code: rs_level = 2
         elif "B" in code: rs_level = 3
 
-    # Calculate if chances should be visible based on rules
     show_red = (chances.get('red') or rs_level >= 1) and rs_level < 2
     show_blk = (chances.get('black') or rs_level >= 1) and rs_level < 3
 
-    # Dynamic Height Calculation
     width = 800
     off_count = len(official_en)
     chances_h = 0
@@ -117,13 +135,11 @@ def generate_status_image(official_en, official_tc, custom_warn, chances):
     except IOError:
         font_title = font_sec = font_body = font_detail = ImageFont.load_default()
 
-    # Base Header Banner
     draw.rectangle([0, 0, width, 60], fill=(30, 31, 34))
     now_str = datetime.now(ZoneInfo("Asia/Hong_Kong")).strftime("%Y-%m-%d %H:%M:%S HKT")
     draw.text((20, 15), f"HKO Weather Monitoring Board ({now_str})", font=font_title, fill=(255, 255, 255))
 
     y = 80
-    # --- SECTION 1: OFFICIAL WARNINGS ---
     draw.text((20, y), "Official Warnings / 官方警告", font=font_sec, fill=(114, 137, 218))
     y += 35
     if not official_en:
@@ -145,7 +161,6 @@ def generate_status_image(official_en, official_tc, custom_warn, chances):
             draw.text((75, y + 35), detail, font=font_detail, fill=(180, 180, 180))
             y += 85
 
-    # --- SECTION 2: UNOFFICIAL WARNINGS & CHANCES ---
     y += 15
     draw.text((20, y), "Unofficial Parody Warnings / 非官方警告", font=font_sec, fill=(155, 89, 182))
     y += 35
@@ -169,7 +184,6 @@ def generate_status_image(official_en, official_tc, custom_warn, chances):
         draw.text((75, y + 35), detail, font=font_detail, fill=(180, 180, 180))
         y += 85
 
-    # Draw Chances (Only shown if conditions apply)
     if show_red or show_blk:
         y += 10
         if show_red:
@@ -192,20 +206,23 @@ def post_to_discord(messages, official_en, official_tc, custom, chances):
 def main():
     if not WEBHOOK_URL: return
     
-    action = os.environ.get('CUSTOM_ACTION', 'NONE').split()[0]
-    c_type = os.environ.get('CUSTOM_TYPE', '')
-    v_until = os.environ.get('CUSTOM_VALID_UNTIL', '')
-    c_area = os.environ.get('CUSTOM_AREA', 'None')
+    # Safely handle missing env variables during automated cron runs
+    action_env = os.environ.get('CUSTOM_ACTION', '').strip()
+    action = action_env.split()[0] if action_env else 'NONE'
     
-    in_red_chance = os.environ.get('RED_CHANCE', '')
-    in_blk_chance = os.environ.get('BLACK_CHANCE', '')
+    c_type = os.environ.get('CUSTOM_TYPE', '').strip()
+    v_until = os.environ.get('CUSTOM_VALID_UNTIL', '').strip()
+    c_area = os.environ.get('CUSTOM_AREA', 'None').strip()
+    custom_announcement = os.environ.get('CUSTOM_ANNOUNCEMENT', '').strip()
+    
+    in_red_chance = os.environ.get('RED_CHANCE', '').strip()
+    in_blk_chance = os.environ.get('BLACK_CHANCE', '').strip()
     
     now = datetime.now(ZoneInfo("Asia/Hong_Kong"))
     official_en = requests.get(HKO_EN_URL).json() or {}
     official_tc = requests.get(HKO_TC_URL).json() or {}
     prev_official, current_custom, chances = load_state()
     
-    # Process manual chance updates
     if in_red_chance: chances['red'] = "" if in_red_chance.upper() == 'CLEAR' else in_red_chance
     if in_blk_chance: chances['black'] = "" if in_blk_chance.upper() == 'CLEAR' else in_blk_chance
     
@@ -227,10 +244,20 @@ def main():
                 "expireTime": target_expire_dt.isoformat() if target_expire_dt and "Watch" not in c_type and "Emergency" not in c_type else None
             }
             
+            # Format base issuance text
             if new_custom["expireTime"]:
-                messages.append(f"{zh_name} 在 {format_zh_time(now)}發出，有效時間至{format_zh_time(target_expire_dt)}。\n{en_name} has been issued at {format_en_time(now)}, and is valid until {format_en_time(target_expire_dt)}.")
+                issuance_msg = f"{zh_name} 在 {format_zh_time(now)}發出，有效時間至{format_zh_time(target_expire_dt)}。\n{en_name} has been issued at {format_en_time(now)}, and is valid until {format_en_time(target_expire_dt)}."
             else:
-                messages.append(f"{zh_name} 在 {format_zh_time(now)}發出。\n{en_name} has been issued at {format_en_time(now)}.")
+                issuance_msg = f"{zh_name} 在 {format_zh_time(now)}發出。\n{en_name} has been issued at {format_en_time(now)}."
+
+            # Append announcements
+            _, en_area = translate_areas(c_area)
+            final_announcement = custom_announcement if custom_announcement else get_template_announcement(c_type, en_area)
+            
+            if final_announcement:
+                issuance_msg += f"\n\n📢 **Announcement / 特別報告:**\n{final_announcement}"
+                
+            messages.append(issuance_msg)
             current_custom = new_custom
 
         elif action == 'EXTEND' and current_custom and current_custom['type'] == c_type:
