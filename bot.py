@@ -154,7 +154,7 @@ def generate_status_image(official_en, official_tc, custom_warn, chances):
         y += 40
     else:
         zh_n, en_n = get_warning_identifiers(custom_warn['type'], custom_warn.get('area', 'None'))
-        asset_name = UNOFFICICIAL_ASSETS.get(custom_warn['type'], 'default')
+        asset_name = UNOFFICIAL_ASSETS.get(custom_warn['type'], 'default')
         
         if paste_icon(img, "unofficial", asset_name, 35, y):
             draw.text((75, y + 2), f"{zh_n} | {en_n}", font=font_body, fill=(200, 120, 255))
