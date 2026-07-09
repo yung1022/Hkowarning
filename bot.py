@@ -17,7 +17,7 @@ AREA_MAP = {
 }
 
 UNOFFICIAL_ASSETS = {
-    'White Rainstorm Warning': 'white_rainstorm',
+    'White Rainstorm Watch': 'white_rainstorm',
     'Blue Rainstorm Warning': 'blue_rainstorm',
     'Red Rainstorm Watch': 'red_watch',
     'Black Rainstorm Watch': 'black_watch',
@@ -27,14 +27,15 @@ UNOFFICIAL_ASSETS = {
 def translate_areas(area_str):
     if not area_str or str(area_str).strip().lower() == 'none':
         return 'None', 'None'
-    # Split by comma to support multiple districts
     areas = [a.strip() for a in area_str.split(',')]
     zh_areas = [AREA_MAP.get(a, a) for a in areas]
     return "及".join(zh_areas), " and ".join(areas)
 
 def get_template_announcement(w_type, en_area):
-    if w_type == 'White Rainstorm Warning':
-        return "1. Expect heavy rain of about 10mm/h to form over the next 2-3 hours.\n2. About 10mm/h of heavy rain is currently impacting on most parts of Hong Kong."
+    area_text = en_area if en_area != 'None' else "most parts of Hong Kong"
+    
+    if w_type == 'White Rainstorm Watch':
+        return f"1. Expect heavy rain of about 10mm/h to form over the next 2-3 hours.\n2. About 10mm/h of heavy rain is currently impacting on {area_text}."
     elif w_type == 'Blue Rainstorm Warning':
         return "1. Expect heavy rain of about 30mm/h to form over the next 2-3 hours.\n2. About 20mm/h of heavy rain is currently impacting on most parts of Hong Kong."
     elif w_type == 'Red Rainstorm Watch':
@@ -73,7 +74,11 @@ def parse_custom_target_time(time_str):
         return None
 
 def get_warning_identifiers(w_type, area="None"):
-    if w_type == 'White Rainstorm Warning': return "白色暴雨警告信號", w_type
+    if w_type == 'White Rainstorm Watch': 
+        zh_a, en_a = translate_areas(area)
+        if en_a != 'None':
+            return f"{zh_a}白色暴雨戒備信號", f"White Rainstorm Watch for {en_a}"
+        return "白色暴雨戒備信號", "White Rainstorm Watch"
     if w_type == 'Blue Rainstorm Warning': return "藍色暴雨警告信號", w_type
     if w_type == 'Red Rainstorm Watch': return "紅色暴雨戒備信號", w_type
     if w_type == 'Black Rainstorm Watch': return "黑色暴雨戒備信號", w_type
@@ -206,7 +211,6 @@ def post_to_discord(messages, official_en, official_tc, custom, chances):
 def main():
     if not WEBHOOK_URL: return
     
-    # Safely handle missing env variables during automated cron runs
     action_env = os.environ.get('CUSTOM_ACTION', '').strip()
     action = action_env.split()[0] if action_env else 'NONE'
     
@@ -229,12 +233,18 @@ def main():
     messages = []
     has_image_update_only = (in_red_chance or in_blk_chance) and action == 'NONE'
 
-    if action in ['ISSUE', 'EXTEND', 'CANCEL']:
+    if action == 'ANNOUNCE':
+        _, en_area = translate_areas(c_area)
+        final_announcement = custom_announcement if custom_announcement else get_template_announcement(c_type, en_area)
+        if final_announcement:
+            messages.append(f"📢 **Announcement / 特別報告:**\n{final_announcement}")
+
+    elif action in ['ISSUE', 'EXTEND', 'CANCEL']:
         zh_name, en_name = get_warning_identifiers(c_type, c_area)
         target_expire_dt = parse_custom_target_time(v_until)
         
         if action == 'ISSUE':
-            if current_custom and "Rainstorm Warning" in current_custom['type'] and "Rainstorm Warning" in c_type:
+            if current_custom and "Rainstorm" in current_custom['type'] and "Rainstorm Warning" in c_type:
                 old_zh, old_en = get_warning_identifiers(current_custom['type'], current_custom.get('area', 'None'))
                 messages.append(f"🔄 {old_zh} 在{format_zh_time(now)}取消並被替代。\n{old_en} has been replaced and cancelled at {format_en_time(now)}.")
             
@@ -244,16 +254,13 @@ def main():
                 "expireTime": target_expire_dt.isoformat() if target_expire_dt and "Watch" not in c_type and "Emergency" not in c_type else None
             }
             
-            # Format base issuance text
             if new_custom["expireTime"]:
                 issuance_msg = f"{zh_name} 在 {format_zh_time(now)}發出，有效時間至{format_zh_time(target_expire_dt)}。\n{en_name} has been issued at {format_en_time(now)}, and is valid until {format_en_time(target_expire_dt)}."
             else:
                 issuance_msg = f"{zh_name} 在 {format_zh_time(now)}發出。\n{en_name} has been issued at {format_en_time(now)}."
 
-            # Append announcements
             _, en_area = translate_areas(c_area)
             final_announcement = custom_announcement if custom_announcement else get_template_announcement(c_type, en_area)
-            
             if final_announcement:
                 issuance_msg += f"\n\n📢 **Announcement / 特別報告:**\n{final_announcement}"
                 
@@ -277,10 +284,12 @@ def main():
                 current_custom = None
 
         if current_custom and "Watch" in current_custom['type']:
+            is_official_amber = ("WRAIN" in official_en and "A" in official_en["WRAIN"].get("code", ""))
             is_official_red = ("WRAIN" in official_en and "R" in official_en["WRAIN"].get("code", ""))
             is_official_blk = ("WRAIN" in official_en and "B" in official_en["WRAIN"].get("code", ""))
             
-            if (current_custom['type'] == 'Red Rainstorm Watch' and is_official_red) or \
+            if (current_custom['type'] == 'White Rainstorm Watch' and (is_official_amber or is_official_red or is_official_blk)) or \
+               (current_custom['type'] == 'Red Rainstorm Watch' and is_official_red) or \
                (current_custom['type'] == 'Black Rainstorm Watch' and is_official_blk):
                 zh_n, en_n = get_warning_identifiers(current_custom['type'])
                 messages.append(f"🛑 {zh_n} 因應天文台正式發出相應暴雨警告，在{format_zh_time(now)}自動取消。\n{en_n} has been automatically cancelled at {format_en_time(now)} due to official HKO upgrade.")
@@ -291,15 +300,26 @@ def main():
             if not prev_w or en_warn.get('updateTime') != prev_w.get('updateTime'):
                 zh_n = official_tc.get(code, {}).get('name', en_warn.get('name'))
                 iss_t = parse_time(en_warn.get('issueTime'))
+                exp_t = parse_time(en_warn.get('expireTime'))
+                
+                # Thunderstorm Extend Fix
                 if code == "WTS" and en_warn.get('actionCode') == "EXTEND":
-                    messages.append(f"{zh_n} 有效時間延長。\n{en_warn.get('name')} extended.")
+                    messages.append(f"{zh_n} 有效時間延長至{format_zh_time(exp_t)}。\n{en_warn.get('name')} extended until {format_en_time(exp_t)}.")
                 else:
                     messages.append(f"{zh_n} 在 {format_zh_time(iss_t)}發出。\n{en_warn.get('name')} issued at {format_en_time(iss_t)}.")
 
         for code, prev_w in prev_official.items():
             if code not in official_en:
                 zh_n = prev_w.get('tc_name', prev_w.get('name'))
-                messages.append(f"{zh_n} 在{format_zh_time(now)}取消。\n{prev_w.get('name')} cancelled at {format_en_time(now)}.")
+                
+                # Thunderstorm Cancel Fix
+                if code == "WTS":
+                    exp_t = parse_time(prev_w.get('expireTime'))
+                    t_str_zh = format_zh_time(exp_t) if exp_t else format_zh_time(now)
+                    t_str_en = format_en_time(exp_t) if exp_t else format_en_time(now)
+                    messages.append(f"雷暴警告有效時間在{t_str_zh}終止。\n{prev_w.get('name')} valid until {t_str_en} has terminated.")
+                else:
+                    messages.append(f"{zh_n} 在{format_zh_time(now)}取消。\n{prev_w.get('name')} cancelled at {format_en_time(now)}.")
 
     if has_image_update_only and not messages:
         messages.append("📊 預測機率已手動更新。\nForecast probabilities manually updated.")
