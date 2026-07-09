@@ -6,19 +6,20 @@ on:
   workflow_dispatch:
     inputs:
       custom_action:
-        description: 'Action for Custom Warning'
+        description: 'Action for Custom Warning / Announcement'
         type: choice
         options:
           - NONE (Run Auto Check Only)
           - ISSUE
           - EXTEND
           - CANCEL
+          - ANNOUNCE
         default: 'NONE (Run Auto Check Only)'
       warning_type:
         description: 'Custom Warning Type'
         type: choice
         options:
-          - White Rainstorm Warning
+          - White Rainstorm Watch
           - Blue Rainstorm Warning
           - Red Rainstorm Watch
           - Black Rainstorm Watch
@@ -28,7 +29,7 @@ on:
         type: string
         required: false
       area:
-        description: 'Area(s) for Emergency (Comma separated, e.g., Kowloon, West NT)'
+        description: 'Area(s) (Comma separated, e.g., Kowloon, West NT)'
         type: string
         required: false
       announcement:
