@@ -123,10 +123,108 @@ def paste_icon(img, folder, filename, x, y):
     return False
 
 def generate_status_image(official_en, official_tc, custom_warn, chances):
-    # Omitted for brevity - use identical image generation code from previous responses 
-    # to maintain exactly the same image drawing logic without breaking character limits here.
-    # Note: Keep the function block intact in your actual file as it was before.
-    pass 
+    rs_level = 0
+    if "WRAIN" in official_en:
+        code = official_en["WRAIN"].get("code", "")
+        if "A" in code: rs_level = 1
+        elif "R" in code: rs_level = 2
+        elif "B" in code: rs_level = 3
+
+    show_red = (chances.get('red') or rs_level >= 1) and rs_level < 2
+    show_blk = (chances.get('black') or rs_level >= 1) and rs_level < 3
+
+    width = 800
+    off_count = len(official_en)
+    chances_h = 0
+    if show_red: chances_h += 30
+    if show_blk: chances_h += 30
+    if chances_h > 0: chances_h += 20
+    
+    height = 60 + 50 + (off_count * 90 if off_count else 50) + 50 + (90 if custom_warn else 50) + chances_h + 30
+    
+    img = Image.new('RGB', (width, height), color=(43, 45, 49))
+    draw = ImageDraw.Draw(img)
+    
+    try:
+        font_path = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
+        font_title = ImageFont.truetype(font_path, 26)
+        font_sec = ImageFont.truetype(font_path, 22)
+        font_body = ImageFont.truetype(font_path, 20)
+        font_detail = ImageFont.truetype(font_path, 16)
+    except IOError:
+        font_title = font_sec = font_body = font_detail = ImageFont.load_default()
+
+    draw.rectangle([0, 0, width, 60], fill=(30, 31, 34))
+    now_str = datetime.now(ZoneInfo("Asia/Hong_Kong")).strftime("%Y-%m-%d %H:%M:%S HKT")
+    draw.text((20, 15), f"HKO Weather Monitoring Board ({now_str})", font=font_title, fill=(255, 255, 255))
+
+    y = 80
+    draw.text((20, y), "Official Warnings / 官方警告", font=font_sec, fill=(114, 137, 218))
+    y += 35
+    if not official_en:
+        draw.text((40, y), "No official warnings in force / 現時沒有官方生效警告", font=font_body, fill=(150, 150, 150))
+        y += 40
+    else:
+        for key, en_warn in official_en.items():
+            zh_name = official_tc.get(key, {}).get('name', en_warn.get('name'))
+            warn_code = en_warn.get('code', key)
+            
+            if paste_icon(img, "official", warn_code, 35, y):
+                draw.text((75, y + 2), f"{zh_name} | {en_warn.get('name')}", font=font_body, fill=(255, 100, 100))
+            else:
+                draw.text((35, y), f"⚠️ {zh_name} | {en_warn.get('name')}", font=font_body, fill=(255, 100, 100))
+            
+            detail = f"Issued: {format_en_time(parse_time(en_warn.get('issueTime')))}"
+            if en_warn.get('expireTime'):
+                detail += f" | Valid until: {format_en_time(parse_time(en_warn.get('expireTime')))}"
+            draw.text((75, y + 35), detail, font=font_detail, fill=(180, 180, 180))
+            y += 85
+
+    y += 15
+    draw.text((20, y), "Unofficial Parody Warnings / 非官方警告", font=font_sec, fill=(155, 89, 182))
+    y += 35
+    if not custom_warn:
+        draw.text((40, y), "No custom warnings active / 現時沒有非官方警告", font=font_body, fill=(150, 150, 150))
+        y += 40
+    else:
+        zh_n, en_n = get_warning_identifiers(custom_warn['type'], custom_warn.get('area', 'None'))
+        asset_name = UNOFFICIAL_ASSETS.get(custom_warn['type'], 'default')
+        
+        if paste_icon(img, "unofficial", asset_name, 35, y):
+            draw.text((75, y + 2), f"{zh_n} | {en_n}", font=font_body, fill=(200, 120, 255))
+        else:
+            draw.text((35, y), f"🔮 {zh_n} | {en_n}", font=font_body, fill=(200, 120, 255))
+        
+        iss_dt = parse_time(custom_warn.get('issueTime'))
+        detail = f"Issued: {format_en_time(iss_dt)}"
+        if custom_warn.get('expireTime'):
+            exp_dt = parse_time(custom_warn.get('expireTime'))
+            detail += f" | Valid until: {format_en_time(exp_dt)}"
+        draw.text((75, y + 35), detail, font=font_detail, fill=(180, 180, 180))
+        y += 85
+
+    if show_red or show_blk:
+        y += 10
+        if show_red:
+            val = chances.get('red', '--')
+            draw.text((40, y), f"🔴 Chances for Red Rainstorm Warning: {val}", font=font_body, fill=(255, 100, 100))
+            y += 30
+        if show_blk:
+            val = chances.get('black', '--')
+            draw.text((40, y), f"⚫ Chances for Black Rainstorm Warning: {val}", font=font_body, fill=(150, 150, 150))
+
+    img.save(IMAGE_FILE)
+
+def post_to_discord(messages, official_en, official_tc, custom, chances):
+    if not messages: return
+    generate_status_image(official_en, official_tc, custom, chances)
+    payload = {"content": "\n\n".join(messages)}
+    
+    try:
+        with open(IMAGE_FILE, "rb") as f:
+            requests.post(WEBHOOK_URL, data={"payload_json": json.dumps(payload)}, files={"file": (IMAGE_FILE, f, "image/png")})
+    except Exception as e:
+        print(f"Error posting to Discord: {e}")
 
 def main():
     if not WEBHOOK_URL: return
@@ -156,6 +254,7 @@ def main():
     if in_blk_chance: chances['black'] = "" if in_blk_chance.upper() == 'CLEAR' else in_blk_chance
     
     messages = []
+    has_image_update_only = (in_red_chance or in_blk_chance) and action == 'NONE'
     
     # 1. Handle Standalone Announcements
     if action == 'ANNOUNCE':
@@ -306,6 +405,9 @@ def main():
                     hist_item['end_time'] = now.isoformat()
                     hist_item['duration'] = calculate_duration(hist_item['issue_time'], now.isoformat())
 
+    if has_image_update_only and not messages:
+        messages.append("📊 預測機率已手動更新。\nForecast probabilities manually updated.")
+
     next_official_state = {}
     for k, v in official_en.items():
         v_copy = dict(v)
@@ -313,8 +415,7 @@ def main():
         next_official_state[k] = v_copy
 
     if messages:
-        # Call post_to_discord logic here
-        pass 
+        post_to_discord(messages, official_en, official_tc, current_custom, chances)
         
     save_json(STATE_FILE, {"official": next_official_state, "custom": current_custom, "chances": chances})
     save_json(HISTORY_FILE, history)
