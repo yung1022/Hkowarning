@@ -6,8 +6,11 @@ from zoneinfo import ZoneInfo
 from PIL import Image, ImageDraw, ImageFont
 
 WEBHOOK_URL = os.environ.get('DISCORD_WEBHOOK_URL')
-HKO_EN_URL = 'https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=en'
-HKO_TC_URL = 'https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=tc'
+HKO_WARNSUM_EN = 'https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=en'
+HKO_WARNSUM_TC = 'https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=tc'
+HKO_WARNINFO_EN = 'https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warningInfo&lang=en'
+HKO_WARNINFO_TC = 'https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warningInfo&lang=tc'
+
 STATE_FILE = 'warning_state.json'
 HISTORY_FILE = 'history.json'
 IMAGE_FILE = 'current_warnings.png'
@@ -108,11 +111,25 @@ def save_json(filepath, data):
     with open(filepath, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
-def get_active_history(history, type_code, is_custom=False):
-    for item in history['warnings']:
-        if item['status'] == 'active' and item['code'] == type_code and item.get('is_custom', False) == is_custom:
+def get_active_history(history_list, type_code):
+    for item in history_list:
+        if item['status'] == 'active' and item['code'] == type_code:
             return item
     return None
+
+def fetch_warning_info_text(code, lang='en'):
+    """Fetch exact warning details from HKO warningInfo endpoint"""
+    url = HKO_WARNINFO_EN if lang == 'en' else HKO_WARNINFO_TC
+    try:
+        data = requests.get(url, timeout=10).json()
+        if "details" in data:
+            for item in data["details"]:
+                # Match code (e.g., 'WTS', 'WRAIN')
+                if item.get("warningStatementCode") == code or item.get("subtype") == code:
+                    return "\n".join(item.get("contents", []))
+    except Exception:
+        pass
+    return ""
 
 def paste_icon(img, folder, filename, x, y):
     path = f"assets/{folder}/{filename}.png"
@@ -122,7 +139,7 @@ def paste_icon(img, folder, filename, x, y):
         return True
     return False
 
-def generate_status_image(official_en, official_tc, custom_warn, chances):
+def generate_status_image(official_en, official_tc, custom_warns, chances):
     rs_level = 0
     if "WRAIN" in official_en:
         code = official_en["WRAIN"].get("code", "")
@@ -135,12 +152,14 @@ def generate_status_image(official_en, official_tc, custom_warn, chances):
 
     width = 800
     off_count = len(official_en)
+    cust_count = len(custom_warns)
+    
     chances_h = 0
     if show_red: chances_h += 30
     if show_blk: chances_h += 30
     if chances_h > 0: chances_h += 20
     
-    height = 60 + 50 + (off_count * 90 if off_count else 50) + 50 + (90 if custom_warn else 50) + chances_h + 30
+    height = 60 + 50 + (off_count * 90 if off_count else 50) + 50 + (cust_count * 90 if cust_count else 50) + chances_h + 30
     
     img = Image.new('RGB', (width, height), color=(43, 45, 49))
     draw = ImageDraw.Draw(img)
@@ -183,25 +202,26 @@ def generate_status_image(official_en, official_tc, custom_warn, chances):
     y += 15
     draw.text((20, y), "Unofficial Parody Warnings / 非官方警告", font=font_sec, fill=(155, 89, 182))
     y += 35
-    if not custom_warn:
+    if not custom_warns:
         draw.text((40, y), "No custom warnings active / 現時沒有非官方警告", font=font_body, fill=(150, 150, 150))
         y += 40
     else:
-        zh_n, en_n = get_warning_identifiers(custom_warn['type'], custom_warn.get('area', 'None'))
-        asset_name = UNOFFICIAL_ASSETS.get(custom_warn['type'], 'default')
-        
-        if paste_icon(img, "unofficial", asset_name, 35, y):
-            draw.text((75, y + 2), f"{zh_n} | {en_n}", font=font_body, fill=(200, 120, 255))
-        else:
-            draw.text((35, y), f"🔮 {zh_n} | {en_n}", font=font_body, fill=(200, 120, 255))
-        
-        iss_dt = parse_time(custom_warn.get('issueTime'))
-        detail = f"Issued: {format_en_time(iss_dt)}"
-        if custom_warn.get('expireTime'):
-            exp_dt = parse_time(custom_warn.get('expireTime'))
-            detail += f" | Valid until: {format_en_time(exp_dt)}"
-        draw.text((75, y + 35), detail, font=font_detail, fill=(180, 180, 180))
-        y += 85
+        for c_key, c_warn in custom_warns.items():
+            zh_n, en_n = get_warning_identifiers(c_warn['type'], c_warn.get('area', 'None'))
+            asset_name = UNOFFICIAL_ASSETS.get(c_warn['type'], 'default')
+            
+            if paste_icon(img, "unofficial", asset_name, 35, y):
+                draw.text((75, y + 2), f"{zh_n} | {en_n}", font=font_body, fill=(200, 120, 255))
+            else:
+                draw.text((35, y), f"🔮 {zh_n} | {en_n}", font=font_body, fill=(200, 120, 255))
+            
+            iss_dt = parse_time(c_warn.get('issueTime'))
+            detail = f"Issued: {format_en_time(iss_dt)}"
+            if c_warn.get('expireTime'):
+                exp_dt = parse_time(c_warn.get('expireTime'))
+                detail += f" | Valid until: {format_en_time(exp_dt)}"
+            draw.text((75, y + 35), detail, font=font_detail, fill=(180, 180, 180))
+            y += 85
 
     if show_red or show_blk:
         y += 10
@@ -215,14 +235,23 @@ def generate_status_image(official_en, official_tc, custom_warn, chances):
 
     img.save(IMAGE_FILE)
 
-def post_to_discord(messages, official_en, official_tc, custom, chances):
+def post_to_discord(messages, official_en, official_tc, custom_warns, chances):
     if not messages: return
-    generate_status_image(official_en, official_tc, custom, chances)
-    payload = {"content": "\n\n".join(messages)}
+    generate_status_image(official_en, official_tc, custom_warns, chances)
+    
+    # Discord has a 2000 character limit per message. Split if necessary.
+    full_text = "\n\n".join(messages)
+    chunks = [full_text[i:i+1900] for i in range(0, len(full_text), 1900)]
     
     try:
-        with open(IMAGE_FILE, "rb") as f:
-            requests.post(WEBHOOK_URL, data={"payload_json": json.dumps(payload)}, files={"file": (IMAGE_FILE, f, "image/png")})
+        for i, chunk in enumerate(chunks):
+            payload = {"content": chunk}
+            # Only attach image to the last chunk
+            if i == len(chunks) - 1:
+                with open(IMAGE_FILE, "rb") as f:
+                    requests.post(WEBHOOK_URL, data={"payload_json": json.dumps(payload)}, files={"file": (IMAGE_FILE, f, "image/png")})
+            else:
+                requests.post(WEBHOOK_URL, json=payload)
     except Exception as e:
         print(f"Error posting to Discord: {e}")
 
@@ -240,15 +269,27 @@ def main():
     in_blk_chance = os.environ.get('BLACK_CHANCE', '').strip()
     
     now = datetime.now(ZoneInfo("Asia/Hong_Kong"))
-    official_en = requests.get(HKO_EN_URL).json() or {}
-    official_tc = requests.get(HKO_TC_URL).json() or {}
+    official_en = requests.get(HKO_WARNSUM_EN).json() or {}
+    official_tc = requests.get(HKO_WARNSUM_TC).json() or {}
     
-    state_data = load_json(STATE_FILE, {"official": {}, "custom": None, "chances": {}})
+    state_data = load_json(STATE_FILE, {"official": {}, "custom": {}, "chances": {}})
     prev_official = state_data.get("official", {})
-    current_custom = state_data.get("custom", None)
     chances = state_data.get("chances", {})
     
-    history = load_json(HISTORY_FILE, {"warnings": [], "announcements": []})
+    # Migrate custom warnings to dict format if needed
+    current_customs = state_data.get("custom", {})
+    if isinstance(current_customs, dict) and "type" in current_customs:
+        current_customs = {current_customs["type"]: current_customs}
+    elif not isinstance(current_customs, dict):
+        current_customs = {}
+        
+    # Migrate history file to split format
+    history = load_json(HISTORY_FILE, {"official_warnings": [], "custom_warnings": [], "announcements": []})
+    if "warnings" in history: # Old format migration
+        for w in history["warnings"]:
+            if w.get("is_custom"): history["custom_warnings"].append(w)
+            else: history["official_warnings"].append(w)
+        del history["warnings"]
     
     if in_red_chance: chances['red'] = "" if in_red_chance.upper() == 'CLEAR' else in_red_chance
     if in_blk_chance: chances['black'] = "" if in_blk_chance.upper() == 'CLEAR' else in_blk_chance
@@ -262,21 +303,20 @@ def main():
         final_announcement = custom_announcement if custom_announcement else get_template_announcement(c_type, en_area)
         if final_announcement:
             messages.append(f"📢 **Announcement / 特別報告:**\n{final_announcement}")
-            history['announcements'].append({
-                "time": now.isoformat(),
-                "text": final_announcement
-            })
+            history['announcements'].append({"time": now.isoformat(), "text": final_announcement})
 
-    # 2. Handle Custom Warnings Actions
-    elif action in ['ISSUE', 'EXTEND', 'CANCEL']:
+    # 2. Handle Custom Warnings Actions (Multiple Active Allowed)
+    elif action in ['ISSUE', 'EXTEND', 'CANCEL'] and c_type:
         zh_name, en_name = get_warning_identifiers(c_type, c_area)
         target_expire_dt = parse_custom_target_time(v_until)
         
+        target_custom = current_customs.get(c_type)
+        
         if action == 'ISSUE':
-            if current_custom and "Rainstorm" in current_custom['type'] and "Rainstorm Warning" in c_type:
-                old_zh, old_en = get_warning_identifiers(current_custom['type'], current_custom.get('area', 'None'))
+            if target_custom:
+                old_zh, old_en = get_warning_identifiers(target_custom['type'], target_custom.get('area', 'None'))
                 messages.append(f"🔄 {old_zh} 在{format_zh_time(now)}取消並被替代。\n{old_en} has been replaced and cancelled at {format_en_time(now)}.")
-                old_hist = get_active_history(history, current_custom['type'], is_custom=True)
+                old_hist = get_active_history(history['custom_warnings'], c_type)
                 if old_hist:
                     old_hist['status'] = 'cancelled'
                     old_hist['end_time'] = now.isoformat()
@@ -288,122 +328,147 @@ def main():
                 "expireTime": target_expire_dt.isoformat() if target_expire_dt and "Watch" not in c_type and "Emergency" not in c_type else None
             }
             
+            issuance_msg = f"{zh_name} 在 {format_zh_time(now)}發出。"
+            iss_en_msg = f"{en_name} has been issued at {format_en_time(now)}."
             if new_custom["expireTime"]:
-                issuance_msg = f"{zh_name} 在 {format_zh_time(now)}發出，有效時間至{format_zh_time(target_expire_dt)}。\n{en_name} has been issued at {format_en_time(now)}, and is valid until {format_en_time(target_expire_dt)}."
-            else:
-                issuance_msg = f"{zh_name} 在 {format_zh_time(now)}發出。\n{en_name} has been issued at {format_en_time(now)}."
+                issuance_msg = f"{zh_name} 在 {format_zh_time(now)}發出，有效時間至{format_zh_time(target_expire_dt)}。"
+                iss_en_msg = f"{en_name} has been issued at {format_en_time(now)}, and is valid until {format_en_time(target_expire_dt)}."
 
             _, en_area = translate_areas(c_area)
             final_announcement = custom_announcement if custom_announcement else get_template_announcement(c_type, en_area)
+            
+            full_msg = f"{issuance_msg}\n{iss_en_msg}"
             if final_announcement:
-                issuance_msg += f"\n\n📢 **Announcement / 特別報告:**\n{final_announcement}"
+                full_msg += f"\n\n📢 **Announcement / 特別報告:**\n{final_announcement}"
                 history['announcements'].append({"time": now.isoformat(), "text": final_announcement})
                 
-            messages.append(issuance_msg)
-            current_custom = new_custom
+            messages.append(full_msg)
+            current_customs[c_type] = new_custom
             
-            history['warnings'].append({
+            history['custom_warnings'].append({
                 "id": f"CUST-{int(now.timestamp())}",
-                "is_custom": True, "code": c_type,
+                "code": c_type,
                 "zh_name": zh_name, "en_name": en_name,
                 "issue_time": now.isoformat(),
                 "expire_time": new_custom['expireTime'],
                 "status": "active"
             })
 
-        elif action == 'EXTEND' and current_custom and current_custom['type'] == c_type:
+        elif action == 'EXTEND' and target_custom:
             if target_expire_dt:
-                current_custom['expireTime'] = target_expire_dt.isoformat()
+                target_custom['expireTime'] = target_expire_dt.isoformat()
                 messages.append(f"{zh_name} 有效時間延長至{format_zh_time(target_expire_dt)}。\n{en_name} has been extended until {format_en_time(target_expire_dt)}.")
-                hist_item = get_active_history(history, c_type, is_custom=True)
+                hist_item = get_active_history(history['custom_warnings'], c_type)
                 if hist_item: hist_item['expire_time'] = target_expire_dt.isoformat()
 
-        elif action == 'CANCEL' and current_custom and current_custom['type'] == c_type:
+        elif action == 'CANCEL' and target_custom:
             messages.append(f"{zh_name} 在{format_zh_time(now)}取消。\n{en_name} has been cancelled at {format_en_time(now)}.")
-            hist_item = get_active_history(history, c_type, is_custom=True)
+            hist_item = get_active_history(history['custom_warnings'], c_type)
             if hist_item:
                 hist_item['status'] = 'cancelled'
                 hist_item['end_time'] = now.isoformat()
                 hist_item['duration'] = calculate_duration(hist_item['issue_time'], now.isoformat())
-            current_custom = None
+            del current_customs[c_type]
 
-    else:
-        # Custom Native Expiry / Auto-Cancel
-        if current_custom:
-            is_official_upg = False
-            zh_c, en_c = get_warning_identifiers(current_custom['type'], current_custom.get('area', 'None'))
-            
-            if "Watch" in current_custom['type']:
-                rcode = official_en.get("WRAIN", {}).get("code", "")
-                if (current_custom['type'] == 'White Rainstorm Watch' and rcode in ["A", "R", "B"]) or \
-                   (current_custom['type'] == 'Red Rainstorm Watch' and rcode in ["R", "B"]) or \
-                   (current_custom['type'] == 'Black Rainstorm Watch' and rcode == "B"):
-                    messages.append(f"🛑 {zh_c} 因應天文台正式發出相應暴雨警告，在{format_zh_time(now)}自動取消。\n{en_c} has been automatically cancelled at {format_en_time(now)} due to official HKO upgrade.")
-                    is_official_upg = True
-                    hist_item = get_active_history(history, current_custom['type'], is_custom=True)
-                    if hist_item:
-                        hist_item['status'] = 'cancelled'
-                        hist_item['end_time'] = now.isoformat()
-                        hist_item['duration'] = calculate_duration(hist_item['issue_time'], now.isoformat())
-                    current_custom = None
-
-            if current_custom and current_custom.get('expireTime') and not is_official_upg:
-                exp_dt = parse_time(current_custom['expireTime'])
-                if now >= exp_dt:
-                    messages.append(f"{zh_c} 有效時間在{format_zh_time(exp_dt)}終止。\n{en_c} valid until {format_en_time(exp_dt)} has terminated.")
-                    hist_item = get_active_history(history, current_custom['type'], is_custom=True)
-                    if hist_item:
-                        hist_item['status'] = 'expired'
-                        hist_item['end_time'] = exp_dt.isoformat()
-                        hist_item['duration'] = calculate_duration(hist_item['issue_time'], exp_dt.isoformat())
-                    current_custom = None
-
-        # Official Warnings: Issues and Extends
-        for code, en_warn in official_en.items():
-            prev_w = prev_official.get(code, {})
-            zh_n = official_tc.get(code, {}).get('name', en_warn.get('name'))
-            en_n = en_warn.get('name')
-            iss_t = parse_time(en_warn.get('issueTime'))
-            exp_t = parse_time(en_warn.get('expireTime'))
-            
-            if not prev_w:
-                if exp_t:
-                    messages.append(f"{zh_n} 在 {format_zh_time(iss_t)}發出，有效時間至{format_zh_time(exp_t)}。\n{en_n} has been issued at {format_en_time(iss_t)}, and is valid until {format_en_time(exp_t)}.")
-                else:
-                    messages.append(f"{zh_n} 在 {format_zh_time(iss_t)}發出。\n{en_n} has been issued at {format_en_time(iss_t)}.")
-                
-                history['warnings'].append({
-                    "id": f"OFF-{code}-{int(iss_t.timestamp())}",
-                    "is_custom": False, "code": code,
-                    "zh_name": zh_n, "en_name": en_n,
-                    "issue_time": iss_t.isoformat(),
-                    "expire_time": exp_t.isoformat() if exp_t else None,
-                    "status": "active"
-                })
-            
-            elif en_warn.get('updateTime') != prev_w.get('updateTime'):
-                if code == "WTS" and en_warn.get('actionCode') == "EXTEND":
-                    messages.append(f"{zh_n} 有效時間延長至{format_zh_time(exp_t)}。\n{en_n} has been extended until {format_en_time(exp_t)}.")
-                    hist_item = get_active_history(history, code, is_custom=False)
-                    if hist_item: hist_item['expire_time'] = exp_t.isoformat()
-
-        # Official Warnings: Cancels and Expires
-        for code, prev_w in prev_official.items():
-            if code not in official_en:
-                zh_n = prev_w.get('tc_name', prev_w.get('name'))
-                en_n = prev_w.get('name')
-                exp_t = parse_time(prev_w.get('expireTime'))
-                
-                if code == "WTS" and exp_t:
-                    messages.append(f"{zh_n} 有效時間在{format_zh_time(exp_t)}終止。\n{en_n} valid until {format_en_time(exp_t)} has terminated.")
-                else:
-                    messages.append(f"{zh_n} 在{format_zh_time(now)}取消。\n{en_n} has been cancelled at {format_en_time(now)}.")
-                
-                hist_item = get_active_history(history, code, is_custom=False)
+    # 3. Custom Native Expiry / Auto-Cancel
+    for c_key in list(current_customs.keys()):
+        c_warn = current_customs[c_key]
+        zh_c, en_c = get_warning_identifiers(c_warn['type'], c_warn.get('area', 'None'))
+        is_official_upg = False
+        
+        if "Watch" in c_warn['type']:
+            rcode = official_en.get("WRAIN", {}).get("code", "")
+            if (c_warn['type'] == 'White Rainstorm Watch' and rcode in ["A", "R", "B"]) or \
+               (c_warn['type'] == 'Red Rainstorm Watch' and rcode in ["R", "B"]) or \
+               (c_warn['type'] == 'Black Rainstorm Watch' and rcode == "B"):
+                messages.append(f"🛑 {zh_c} 因應天文台正式發出相應暴雨警告，在{format_zh_time(now)}自動取消。\n{en_c} has been automatically cancelled at {format_en_time(now)} due to official HKO upgrade.")
+                is_official_upg = True
+                hist_item = get_active_history(history['custom_warnings'], c_key)
                 if hist_item:
-                    hist_item['status'] = 'cancelled' if not exp_t else 'expired'
+                    hist_item['status'] = 'cancelled'
                     hist_item['end_time'] = now.isoformat()
                     hist_item['duration'] = calculate_duration(hist_item['issue_time'], now.isoformat())
+                del current_customs[c_key]
+
+        if not is_official_upg and c_warn.get('expireTime'):
+            exp_dt = parse_time(c_warn['expireTime'])
+            if now >= exp_dt:
+                messages.append(f"{zh_c} 有效時間在{format_zh_time(exp_dt)}終止。\n{en_c} valid until {format_en_time(exp_dt)} has terminated.")
+                hist_item = get_active_history(history['custom_warnings'], c_key)
+                if hist_item:
+                    hist_item['status'] = 'expired'
+                    hist_item['end_time'] = exp_dt.isoformat()
+                    hist_item['duration'] = calculate_duration(hist_item['issue_time'], exp_dt.isoformat())
+                del current_customs[c_key]
+
+    # 4. Process Official Warnings via actionCode and warningInfo
+    for code, en_warn in official_en.items():
+        prev_w = prev_official.get(code, {})
+        action_code = en_warn.get('actionCode', 'ISSUE')
+        
+        zh_n = official_tc.get(code, {}).get('name', en_warn.get('name'))
+        en_n = en_warn.get('name')
+        
+        # Determine if there is a real update
+        if not prev_w or en_warn.get('updateTime') != prev_w.get('updateTime'):
+            
+            # Fetch detailed exact message from warningInfo API
+            tc_detail = fetch_warning_info_text(code, 'tc')
+            en_detail = fetch_warning_info_text(code, 'en')
+            
+            # Fallback formatting if API details missing
+            if not tc_detail:
+                iss_t = parse_time(en_warn.get('issueTime'))
+                exp_t = parse_time(en_warn.get('expireTime'))
+                if action_code == 'CANCEL':
+                    tc_detail = f"{zh_n} 在{format_zh_time(now)}取消。"
+                    en_detail = f"{en_n} has been cancelled at {format_en_time(now)}."
+                elif action_code == 'EXTEND':
+                    tc_detail = f"{zh_n} 有效時間延長至{format_zh_time(exp_t)}。"
+                    en_detail = f"{en_n} has been extended until {format_en_time(exp_t)}."
+                else:
+                    tc_detail = f"{zh_n} 在 {format_zh_time(iss_t)}發出。"
+                    en_detail = f"{en_n} has been issued at {format_en_time(iss_t)}."
+
+            messages.append(f"**[{action_code}] {zh_n} | {en_n}**\n{tc_detail}\n\n{en_detail}")
+            
+            # Manage official history based on actionCode
+            if action_code in ['ISSUE', 'REISSUE']:
+                # Close old active one if it exists
+                old_hist = get_active_history(history['official_warnings'], code)
+                if old_hist:
+                    old_hist['status'] = 'replaced'
+                    old_hist['end_time'] = now.isoformat()
+                    old_hist['duration'] = calculate_duration(old_hist['issue_time'], now.isoformat())
+                    
+                history['official_warnings'].append({
+                    "id": f"OFF-{code}-{int(now.timestamp())}",
+                    "code": code,
+                    "zh_name": zh_n, "en_name": en_n,
+                    "issue_time": en_warn.get('issueTime', now.isoformat()),
+                    "expire_time": en_warn.get('expireTime'),
+                    "status": "active"
+                })
+                
+            elif action_code in ['EXTEND', 'UPDATE']:
+                hist_item = get_active_history(history['official_warnings'], code)
+                if hist_item: hist_item['expire_time'] = en_warn.get('expireTime')
+                
+            elif action_code == 'CANCEL':
+                hist_item = get_active_history(history['official_warnings'], code)
+                if hist_item:
+                    hist_item['status'] = 'cancelled'
+                    hist_item['end_time'] = en_warn.get('issueTime', now.isoformat())
+                    hist_item['duration'] = calculate_duration(hist_item['issue_time'], hist_item['end_time'])
+
+    # Cleanup history silently for official warnings that completely disappeared without CANCEL code
+    for code, prev_w in prev_official.items():
+        if code not in official_en:
+            hist_item = get_active_history(history['official_warnings'], code)
+            if hist_item:
+                hist_item['status'] = 'ended'
+                hist_item['end_time'] = now.isoformat()
+                hist_item['duration'] = calculate_duration(hist_item['issue_time'], now.isoformat())
 
     if has_image_update_only and not messages:
         messages.append("📊 預測機率已手動更新。\nForecast probabilities manually updated.")
@@ -415,9 +480,9 @@ def main():
         next_official_state[k] = v_copy
 
     if messages:
-        post_to_discord(messages, official_en, official_tc, current_custom, chances)
+        post_to_discord(messages, official_en, official_tc, current_customs, chances)
         
-    save_json(STATE_FILE, {"official": next_official_state, "custom": current_custom, "chances": chances})
+    save_json(STATE_FILE, {"official": next_official_state, "custom": current_customs, "chances": chances})
     save_json(HISTORY_FILE, history)
 
 if __name__ == "__main__":
