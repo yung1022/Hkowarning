@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HKO Weather Tracker Dashboard</title>
+    <style>
+        :root {
+            --bg-color: #1e1f22;
+            --panel-bg: #2b2d31;
+            --text-main: #dbdee1;
+            --text-sub: #949ba4;
+            --accent-red: #ff5f5f;
+            --accent-purple: #9b59b6;
+            --border: #3f4147;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0; padding: 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        h1, h2 {
+            border-bottom: 2px solid var(--border);
+            padding-bottom: 10px;
+        }
+        .card {
+            background-color: var(--panel-bg);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .tag {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        .tag.official { background-color: var(--accent-red); color: #fff; }
+        .tag.custom { background-color: var(--accent-purple); color: #fff; }
+        .tag.active { background-color: #2ecc71; color: #fff; }
+        .time-text { color: var(--text-sub); font-size: 0.9em; }
+        .announcement-box { border-left: 4px solid #f1c40f; }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            text-align: left;
+            padding: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+        th { background-color: #1e1f22; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>📡 Weather Monitoring Dashboard</h1>
+    
+    <h2>⚠️ Current Active Warnings</h2>
+    <div id="active-warnings">Loading...</div>
+
+    <h2>📢 Recent Announcements</h2>
+    <div id="announcements">Loading...</div>
+
+    <h2>📜 Warning History</h2>
+    <div class="card">
+        <table>
+            <thead>
+                <tr>
+                    <th>Type</th>
+                    <th>Warning Signal</th>
+                    <th>Issued</th>
+                    <th>Ended</th>
+                    <th>Duration</th>
+                </tr>
+            </thead>
+            <tbody id="history-list">
+                <tr><td colspan="5">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    function formatTime(isoStr) {
+        if (!isoStr) return "--";
+        const d = new Date(isoStr);
+        return d.toLocaleString('zh-HK', { hour12: false });
+    }
+
+    async function loadData() {
+        try {
+            // Add a cache-buster query string so GitHub pages doesn't serve stale data
+            const res = await fetch('history.json?t=' + new Date().getTime());
+            const data = await res.json();
+            
+            // 1. Active Warnings
+            const activeDiv = document.getElementById('active-warnings');
+            const actives = data.warnings.filter(w => w.status === 'active');
+            
+            if (actives.length === 0) {
+                activeDiv.innerHTML = '<div class="card">No active warnings.</div>';
+            } else {
+                activeDiv.innerHTML = actives.map(w => `
+                    <div class="card">
+                        <div>
+                            <span class="tag ${w.is_custom ? 'custom' : 'official'}">
+                                ${w.is_custom ? 'Custom' : 'Official'}
+                            </span>
+                            <span class="tag active">ACTIVE</span>
+                            <strong>${w.zh_name} | ${w.en_name}</strong>
+                        </div>
+                        <div class="time-text" style="margin-top: 8px;">
+                            Issued: ${formatTime(w.issue_time)} 
+                            ${w.expire_time ? `<br>Valid Until: ${formatTime(w.expire_time)}` : ''}
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            // 2. Announcements
+            const annDiv = document.getElementById('announcements');
+            const anns = data.announcements.slice().reverse().slice(0, 5); // Show last 5
+            
+            if (anns.length === 0) {
+                annDiv.innerHTML = '<div class="card">No recent announcements.</div>';
+            } else {
+                annDiv.innerHTML = anns.map(a => `
+                    <div class="card announcement-box">
+                        <div class="time-text">${formatTime(a.time)}</div>
+                        <div style="margin-top: 5px; white-space: pre-wrap;">${a.text}</div>
+                    </div>
+                `).join('');
+            }
+
+            // 3. History List
+            const histList = document.getElementById('history-list');
+            const pasts = data.warnings.filter(w => w.status !== 'active').reverse(); // Newest first
+            
+            if (pasts.length === 0) {
+                histList.innerHTML = '<tr><td colspan="5">No past warnings recorded yet.</td></tr>';
+            } else {
+                histList.innerHTML = pasts.map(w => `
+                    <tr>
+                        <td><span class="tag ${w.is_custom ? 'custom' : 'official'}">${w.is_custom ? 'Custom' : 'Official'}</span></td>
+                        <td><strong>${w.zh_name}</strong><br><span style="font-size:0.85em;color:var(--text-sub)">${w.en_name}</span></td>
+                        <td class="time-text">${formatTime(w.issue_time)}</td>
+                        <td class="time-text">${formatTime(w.end_time)}</td>
+                        <td>${w.duration}</td>
+                    </tr>
+                `).join('');
+            }
+
+        } catch (e) {
+            console.error("Failed to load history:", e);
+            document.getElementById('active-warnings').innerHTML = '<div class="card">Error loading data.</div>';
+        }
+    }
+
+    // Load data immediately, refresh every 60 seconds
+    loadData();
+    setInterval(loadData, 60000);
+</script>
+</body>
+</html>
