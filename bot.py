@@ -158,7 +158,8 @@ def generate_status_image(official_en, official_tc, custom_warns, chances, curre
     if show_blk: chances_h += 30
     if chances_h > 0: chances_h += 20
     
-    height = 60 + 50 + (off_count * 90 if off_count else 50) + 50 + (cust_count * 90 if cust_count else 50) + 50 + (meso_count * 90 if meso_count else 50) + chances_h + 30
+    # Increased Meso multiplier to 110 to fit new kinematics text
+    height = 60 + 50 + (off_count * 90 if off_count else 50) + 50 + (cust_count * 90 if cust_count else 50) + 50 + (meso_count * 110 if meso_count else 50) + chances_h + 30
     
     img = Image.new('RGB', (width, height), color=(43, 45, 49))
     draw = ImageDraw.Draw(img)
@@ -234,10 +235,20 @@ def generate_status_image(official_en, official_tc, custom_warns, chances, curre
     else:
         for m_id, m_data in current_mesos.items():
             draw.text((35, y), f"🌪️ Mesoscale Discussion: {m_id}", font=font_body, fill=(243, 156, 18))
+            
+            # Kinematics line
+            kinematics = []
+            if m_data.get('center'): kinematics.append(f"Loc: {m_data['center']}")
+            if m_data.get('movement'): kinematics.append(f"Dir: {m_data['movement']}")
+            if m_data.get('size'): kinematics.append(f"Size: {m_data['size']}")
+            k_str = " | ".join(kinematics)
+            if k_str:
+                draw.text((75, y + 35), k_str, font=font_detail, fill=(255, 200, 100))
+                
             iss_dt = parse_time(m_data.get('issueTime'))
             detail = f"Issued: {format_en_time(iss_dt)} | See dashboard map for area."
-            draw.text((75, y + 35), detail, font=font_detail, fill=(180, 180, 180))
-            y += 85
+            draw.text((75, y + 55), detail, font=font_detail, fill=(180, 180, 180))
+            y += 105
 
     # Chances
     if show_red or show_blk:
@@ -288,6 +299,9 @@ def main():
     meso_id = os.environ.get('MESO_ID', '').strip()
     meso_coords = os.environ.get('MESO_COORDS', '').strip()
     meso_text = os.environ.get('MESO_TEXT', '').strip()
+    meso_center = os.environ.get('MESO_CENTER', '').strip()
+    meso_movement = os.environ.get('MESO_MOVEMENT', '').strip()
+    meso_size = os.environ.get('MESO_SIZE', '').strip()
     
     now = datetime.now(ZoneInfo("Asia/Hong_Kong"))
     official_en = requests.get(HKO_WARNSUM_EN).json() or {}
@@ -329,7 +343,10 @@ def main():
             "id": meso_id,
             "issueTime": now.isoformat(),
             "coords": coords_list,
-            "text": meso_text
+            "text": meso_text,
+            "center": meso_center,
+            "movement": meso_movement,
+            "size": meso_size
         }
         
         history['mesoscale_discussions'].append({
@@ -337,9 +354,23 @@ def main():
             "issue_time": now.isoformat(),
             "status": "active",
             "coords": coords_list,
-            "text": meso_text
+            "text": meso_text,
+            "center": meso_center,
+            "movement": meso_movement,
+            "size": meso_size
         })
-        messages.append(f"🌪️ **Mesoscale Discussion Issued: {meso_id}**\n{meso_text}\n*(Area displayed on dashboard map)*")
+        
+        # Build Discord Message text
+        msg = f"🌪️ **Mesoscale Discussion Issued: {meso_id}**\n"
+        if meso_center: msg += f"📍 **Center:** {meso_center}\n"
+        if meso_movement: msg += f"💨 **Movement:** {meso_movement}\n"
+        if meso_size: msg += f"📏 **Size:** {meso_size}\n"
+        
+        if meso_text:
+            msg += f"\n{meso_text}\n"
+        msg += f"\n*(Area displayed on dashboard map)*"
+        
+        messages.append(msg)
 
     elif meso_action == 'CANCEL' and meso_id:
         if meso_id in current_mesos:
