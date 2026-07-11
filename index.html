@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HKO Weather Tracker Dashboard</title>
+    <!-- Leaflet Map CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+    
     <style>
         :root {
             --bg-color: #1e1f22;
@@ -12,6 +16,7 @@
             --text-sub: #949ba4;
             --accent-red: #ff5f5f;
             --accent-purple: #9b59b6;
+            --accent-orange: #f39c12;
             --border: #3f4147;
         }
         body {
@@ -20,14 +25,8 @@
             color: var(--text-main);
             margin: 0; padding: 20px;
         }
-        .container {
-            max-width: 900px;
-            margin: 0 auto;
-        }
-        h1, h2, h3 {
-            border-bottom: 2px solid var(--border);
-            padding-bottom: 10px;
-        }
+        .container { max-width: 900px; margin: 0 auto; }
+        h1, h2, h3 { border-bottom: 2px solid var(--border); padding-bottom: 10px; }
         h3 { border-bottom: 1px solid var(--border); color: var(--text-sub); }
         .card {
             background-color: var(--panel-bg);
@@ -37,30 +36,36 @@
             box-shadow: 0 4px 6px rgba(0,0,0,0.3);
         }
         .tag {
-            display: inline-block;
-            padding: 3px 8px;
-            border-radius: 4px;
-            font-size: 0.85em;
-            font-weight: bold;
-            margin-right: 10px;
+            display: inline-block; padding: 3px 8px; border-radius: 4px;
+            font-size: 0.85em; font-weight: bold; margin-right: 10px;
         }
         .tag.official { background-color: var(--accent-red); color: #fff; }
         .tag.custom { background-color: var(--accent-purple); color: #fff; }
+        .tag.meso { background-color: var(--accent-orange); color: #fff; }
         .tag.active { background-color: #2ecc71; color: #fff; }
         .time-text { color: var(--text-sub); font-size: 0.9em; }
         .announcement-box { border-left: 4px solid #f1c40f; }
         
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 20px;
-        }
-        th, td {
-            text-align: left;
-            padding: 10px;
-            border-bottom: 1px solid var(--border);
-        }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        th, td { text-align: left; padding: 10px; border-bottom: 1px solid var(--border); }
         th { background-color: #1e1f22; }
+        
+        #map-container { height: 400px; width: 100%; border-radius: 8px; margin-bottom: 20px; }
+        
+        .admin-tools {
+            background: #111; border: 1px solid #444; border-radius: 8px;
+            padding: 15px; margin-bottom: 20px; display: none;
+        }
+        #generator-map { height: 300px; width: 100%; margin-top: 10px; margin-bottom: 10px;}
+        textarea {
+            width: 100%; height: 60px; background: #222; color: #0f0;
+            border: 1px solid #444; font-family: monospace; padding: 5px;
+        }
+        button.admin-btn {
+            background: #444; color: white; border: none; padding: 8px 12px;
+            border-radius: 5px; cursor: pointer;
+        }
+        button.admin-btn:hover { background: #666; }
     </style>
 </head>
 <body>
@@ -68,52 +73,87 @@
 <div class="container">
     <h1>📡 Weather Monitoring Dashboard</h1>
     
+    <button class="admin-btn" onclick="toggleAdmin()">⚙️ Toggle Admin Tools (Coordinate Generator)</button>
+    <div class="admin-tools" id="adminTools">
+        <h3>📍 Mesoscale Coordinate Generator</h3>
+        <p style="font-size: 0.9em; color: var(--text-sub);">Draw a polygon on the map below. The coordinates will be instantly generated for GitHub Actions.</p>
+        <div id="generator-map"></div>
+        <textarea id="coord-output" readonly placeholder="Draw a shape to generate coordinates..."></textarea>
+    </div>
+    
     <h2>⚠️ Current Active Warnings</h2>
+    <div id="map-container"></div> <!-- Active Map for Viewers -->
+    
     <div id="active-warnings">Loading...</div>
 
     <h2>📢 Recent Announcements</h2>
     <div id="announcements">Loading...</div>
 
     <h2>📜 Warning History</h2>
-    
     <div class="card">
         <h3>🔴 Official HKO Warnings</h3>
         <table>
-            <thead>
-                <tr>
-                    <th>Warning Signal</th>
-                    <th>Issued</th>
-                    <th>Ended</th>
-                    <th>Duration</th>
-                </tr>
-            </thead>
-            <tbody id="history-official">
-                <tr><td colspan="4">Loading...</td></tr>
-            </tbody>
+            <thead><tr><th>Warning Signal</th><th>Issued</th><th>Ended</th><th>Duration</th></tr></thead>
+            <tbody id="history-official"><tr><td colspan="4">Loading...</td></tr></tbody>
         </table>
 
         <h3>🔮 Unofficial (Custom) Warnings</h3>
         <table>
-            <thead>
-                <tr>
-                    <th>Warning Signal</th>
-                    <th>Issued</th>
-                    <th>Ended</th>
-                    <th>Duration</th>
-                </tr>
-            </thead>
-            <tbody id="history-custom">
-                <tr><td colspan="4">Loading...</td></tr>
-            </tbody>
+            <thead><tr><th>Warning Signal</th><th>Issued</th><th>Ended</th><th>Duration</th></tr></thead>
+            <tbody id="history-custom"><tr><td colspan="4">Loading...</td></tr></tbody>
+        </table>
+
+        <h3>🌪️ Mesoscale Discussions</h3>
+        <table>
+            <thead><tr><th>Discussion ID</th><th>Issued</th><th>Ended</th><th>Duration</th></tr></thead>
+            <tbody id="history-meso"><tr><td colspan="4">Loading...</td></tr></tbody>
         </table>
     </div>
 </div>
 
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
 <script>
     function formatTime(isoStr) {
         if (!isoStr) return "--";
         const d = new Date(isoStr);
         return d.toLocaleString('zh-HK', { hour12: false });
+    }
+
+    let viewMap;
+    let viewLayers = [];
+    let generatorMapInit = false;
+
+    // Toggle Admin panel & setup Draw map
+    function toggleAdmin() {
+        const panel = document.getElementById('adminTools');
+        panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+        
+        if (panel.style.display === 'block' && !generatorMapInit) {
+            generatorMapInit = true;
+            const genMap = L.map('generator-map').setView([22.3, 114.17], 10);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(genMap);
+            
+            const drawnItems = new L.FeatureGroup();
+            genMap.addLayer(drawnItems);
+            const drawControl = new L.Control.Draw({
+                edit: { featureGroup: drawnItems },
+                draw: { marker: false, circlemarker: false, circle: false, polyline: false,
+                        polygon: { allowIntersection: false } }
+            });
+            genMap.addControl(drawControl);
+
+            genMap.on(L.Draw.Event.CREATED, function (e) {
+                drawnItems.clearLayers(); // Only allow one shape
+                const layer = e.layer;
+                drawnItems.addLayer(layer);
+                
+                const latlngs = layer.getLatLngs()[0];
+                const coordStr = latlngs.map(ll => `${ll.lat.toFixed(4)},${ll.lng.toFixed(4)}`).join(';');
+                document.getElementById('coord-output').value = coordStr;
+            });
+        }
     }
 
     async function loadData() {
@@ -124,36 +164,63 @@
             // Collect all actives
             const officialActives = data.official_warnings.filter(w => w.status === 'active');
             const customActives = data.custom_warnings.filter(w => w.status === 'active');
-            const allActives = [...officialActives, ...customActives];
+            const mesoActives = data.mesoscale_discussions.filter(w => w.status === 'active');
+            const allActives = [...officialActives, ...customActives, ...mesoActives];
             
+            // View Map Init
+            if (!viewMap) {
+                viewMap = L.map('map-container').setView([22.3, 114.17], 10);
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                    attribution: '&copy; CARTO'
+                }).addTo(viewMap);
+            }
+
+            // Draw active Mesoscale polygons on public map
+            viewLayers.forEach(l => viewMap.removeLayer(l));
+            viewLayers = [];
+            mesoActives.forEach(m => {
+                if (m.coords && m.coords.length > 0) {
+                    const poly = L.polygon(m.coords, {color: '#f39c12', fillOpacity: 0.3}).addTo(viewMap);
+                    poly.bindPopup(`<b>Mesoscale Discussion: ${m.id}</b><br>${m.text}`);
+                    viewLayers.push(poly);
+                }
+            });
+
             const activeDiv = document.getElementById('active-warnings');
             if (allActives.length === 0) {
                 activeDiv.innerHTML = '<div class="card">No active warnings.</div>';
             } else {
-                activeDiv.innerHTML = allActives.map(w => `
+                activeDiv.innerHTML = allActives.map(w => {
+                    let typeClass = 'official';
+                    let typeName = 'Official';
+                    let nameDisplay = `<strong>${w.zh_name} | ${w.en_name}</strong>`;
+                    
+                    if (w.id.startsWith('CUST')) { typeClass = 'custom'; typeName = 'Custom'; }
+                    else if (w.id.startsWith('MD-') || w.coords) { 
+                        typeClass = 'meso'; typeName = 'Mesoscale'; 
+                        nameDisplay = `<strong>Discussion ID: ${w.id}</strong><br><span class="time-text">${w.text}</span>`;
+                    }
+
+                    return `
                     <div class="card">
                         <div>
-                            <span class="tag ${w.id.startsWith('OFF') ? 'official' : 'custom'}">
-                                ${w.id.startsWith('OFF') ? 'Official' : 'Custom'}
-                            </span>
+                            <span class="tag ${typeClass}">${typeName}</span>
                             <span class="tag active">ACTIVE</span>
-                            <strong>${w.zh_name} | ${w.en_name}</strong>
+                            ${nameDisplay}
                         </div>
                         <div class="time-text" style="margin-top: 8px;">
                             Issued: ${formatTime(w.issue_time)} 
                             ${w.expire_time ? `<br>Valid Until: ${formatTime(w.expire_time)}` : ''}
                         </div>
                     </div>
-                `).join('');
+                `}).join('');
             }
 
             // Announcements
             const annDiv = document.getElementById('announcements');
             const anns = data.announcements.slice().reverse().slice(0, 5);
-            
-            if (anns.length === 0) {
-                annDiv.innerHTML = '<div class="card">No recent announcements.</div>';
-            } else {
+            if (anns.length === 0) { annDiv.innerHTML = '<div class="card">No recent announcements.</div>'; }
+            else {
                 annDiv.innerHTML = anns.map(a => `
                     <div class="card announcement-box">
                         <div class="time-text">${formatTime(a.time)}</div>
@@ -162,41 +229,26 @@
                 `).join('');
             }
 
-            // Official History Table
-            const offList = document.getElementById('history-official');
-            const offPasts = data.official_warnings.filter(w => w.status !== 'active').reverse();
-            if (offPasts.length === 0) {
-                offList.innerHTML = '<tr><td colspan="4">No past official warnings recorded yet.</td></tr>';
-            } else {
-                offList.innerHTML = offPasts.map(w => `
+            // Tables generator function
+            const makeRows = (list, isMeso = false) => {
+                if(list.length === 0) return '<tr><td colspan="4">No past records.</td></tr>';
+                return list.map(w => `
                     <tr>
-                        <td><strong>${w.zh_name}</strong><br><span style="font-size:0.85em;color:var(--text-sub)">${w.en_name}</span></td>
+                        <td><strong>${isMeso ? w.id : w.zh_name}</strong>
+                        ${!isMeso ? `<br><span style="font-size:0.85em;color:var(--text-sub)">${w.en_name}</span>` : ''}</td>
                         <td class="time-text">${formatTime(w.issue_time)}</td>
                         <td class="time-text">${formatTime(w.end_time)}</td>
                         <td>${w.duration}</td>
                     </tr>
                 `).join('');
-            }
+            };
 
-            // Custom History Table
-            const custList = document.getElementById('history-custom');
-            const custPasts = data.custom_warnings.filter(w => w.status !== 'active').reverse();
-            if (custPasts.length === 0) {
-                custList.innerHTML = '<tr><td colspan="4">No past custom warnings recorded yet.</td></tr>';
-            } else {
-                custList.innerHTML = custPasts.map(w => `
-                    <tr>
-                        <td><strong>${w.zh_name}</strong><br><span style="font-size:0.85em;color:var(--text-sub)">${w.en_name}</span></td>
-                        <td class="time-text">${formatTime(w.issue_time)}</td>
-                        <td class="time-text">${formatTime(w.end_time)}</td>
-                        <td>${w.duration}</td>
-                    </tr>
-                `).join('');
-            }
+            document.getElementById('history-official').innerHTML = makeRows(data.official_warnings.filter(w => w.status !== 'active').reverse());
+            document.getElementById('history-custom').innerHTML = makeRows(data.custom_warnings.filter(w => w.status !== 'active').reverse());
+            document.getElementById('history-meso').innerHTML = makeRows(data.mesoscale_discussions.filter(w => w.status !== 'active').reverse(), true);
 
         } catch (e) {
-            console.error("Failed to load history:", e);
-            document.getElementById('active-warnings').innerHTML = '<div class="card">Error loading data.</div>';
+            console.error("Failed to load data:", e);
         }
     }
 
