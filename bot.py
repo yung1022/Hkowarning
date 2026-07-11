@@ -283,13 +283,19 @@ def main():
     elif not isinstance(current_customs, dict):
         current_customs = {}
         
-    # Migrate history file to split format
-    history = load_json(HISTORY_FILE, {"official_warnings": [], "custom_warnings": [], "announcements": []})
-    if "warnings" in history: # Old format migration
+        # Load history and STRICTLY ensure the new schema keys exist
+    history = load_json(HISTORY_FILE, {})
+    history.setdefault("official_warnings", [])
+    history.setdefault("custom_warnings", [])
+    history.setdefault("announcements", [])
+    
+    # Migrate history file from old format if needed
+    if "warnings" in history: 
         for w in history["warnings"]:
             if w.get("is_custom"): history["custom_warnings"].append(w)
             else: history["official_warnings"].append(w)
         del history["warnings"]
+
     
     if in_red_chance: chances['red'] = "" if in_red_chance.upper() == 'CLEAR' else in_red_chance
     if in_blk_chance: chances['black'] = "" if in_blk_chance.upper() == 'CLEAR' else in_blk_chance
