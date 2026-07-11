@@ -45,12 +45,13 @@
         .tag.active { background-color: #2ecc71; color: #fff; }
         .time-text { color: var(--text-sub); font-size: 0.9em; }
         .announcement-box { border-left: 4px solid #f1c40f; }
+        .meso-kinematics { margin-top: 10px; font-size: 0.9em; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 5px; border-left: 3px solid var(--accent-orange); }
         
         table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
         th, td { text-align: left; padding: 10px; border-bottom: 1px solid var(--border); }
         th { background-color: #1e1f22; }
         
-        #map-container { height: 400px; width: 100%; border-radius: 8px; margin-bottom: 20px; }
+        #map-container { height: 400px; width: 100%; border-radius: 8px; margin-bottom: 20px; border: 1px solid var(--border); }
         
         .admin-tools {
             background: #111; border: 1px solid #444; border-radius: 8px;
@@ -59,7 +60,7 @@
         #generator-map { height: 300px; width: 100%; margin-top: 10px; margin-bottom: 10px;}
         textarea {
             width: 100%; height: 60px; background: #222; color: #0f0;
-            border: 1px solid #444; font-family: monospace; padding: 5px;
+            border: 1px solid #444; font-family: monospace; padding: 5px; margin-bottom: 15px;
         }
         button.admin-btn {
             background: #444; color: white; border: none; padding: 8px 12px;
@@ -73,10 +74,22 @@
 <div class="container">
     <h1>📡 Weather Monitoring Dashboard</h1>
     
-    <button class="admin-btn" onclick="toggleAdmin()">⚙️ Toggle Admin Tools (Coordinate Generator)</button>
+    <button class="admin-btn" onclick="toggleAdmin()">⚙️ Toggle Admin Tools & Radar</button>
     <div class="admin-tools" id="adminTools">
+        
+        <!-- Zoom Earth Embedded Satellite Map -->
+        <h3 style="margin-top: 0;">📡 Live Satellite & Radar Analysis</h3>
+        <p style="font-size: 0.9em; color: var(--text-sub);">Analyze cloud top cooling and convection over Hong Kong.</p>
+        <iframe 
+            src="https://zoom.earth/maps/satellite/#view=22.3,114.1,8z&overlays=radar,wind" 
+            width="100%" height="450px" 
+            style="border: 1px solid #444; border-radius: 6px; margin-bottom: 20px;" 
+            allowfullscreen>
+        </iframe>
+        
+        <!-- Drawing Map -->
         <h3>📍 Mesoscale Coordinate Generator</h3>
-        <p style="font-size: 0.9em; color: var(--text-sub);">Draw a polygon on the map below. The coordinates will be instantly generated for GitHub Actions.</p>
+        <p style="font-size: 0.9em; color: var(--text-sub);">Draw a polygon on the map below to generate coordinates for GitHub Actions.</p>
         <div id="generator-map"></div>
         <textarea id="coord-output" readonly placeholder="Draw a shape to generate coordinates..."></textarea>
     </div>
@@ -181,7 +194,14 @@
             mesoActives.forEach(m => {
                 if (m.coords && m.coords.length > 0) {
                     const poly = L.polygon(m.coords, {color: '#f39c12', fillOpacity: 0.3}).addTo(viewMap);
-                    poly.bindPopup(`<b>Mesoscale Discussion: ${m.id}</b><br>${m.text}`);
+                    
+                    let popupHtml = `<b>Mesoscale Discussion: ${m.id}</b><br>`;
+                    if(m.center) popupHtml += `<b>Center:</b> ${m.center}<br>`;
+                    if(m.movement) popupHtml += `<b>Movement:</b> ${m.movement}<br>`;
+                    if(m.size) popupHtml += `<b>Size:</b> ${m.size}<br>`;
+                    popupHtml += `<br>${m.text || ''}`;
+                    
+                    poly.bindPopup(popupHtml);
                     viewLayers.push(poly);
                 }
             });
@@ -194,11 +214,24 @@
                     let typeClass = 'official';
                     let typeName = 'Official';
                     let nameDisplay = `<strong>${w.zh_name} | ${w.en_name}</strong>`;
+                    let kinematicsHtml = '';
                     
-                    if (w.id.startsWith('CUST')) { typeClass = 'custom'; typeName = 'Custom'; }
+                    if (w.id.startsWith('CUST')) { 
+                        typeClass = 'custom'; typeName = 'Custom'; 
+                    }
                     else if (w.id.startsWith('MD-') || w.coords) { 
                         typeClass = 'meso'; typeName = 'Mesoscale'; 
-                        nameDisplay = `<strong>Discussion ID: ${w.id}</strong><br><span class="time-text">${w.text}</span>`;
+                        nameDisplay = `<strong>Discussion ID: ${w.id}</strong><br><span class="time-text">${w.text || ''}</span>`;
+                        
+                        // Show Kinematics if they exist
+                        if (w.center || w.movement || w.size) {
+                            let kParts = [];
+                            if (w.center) kParts.push(`📍 <b>Center:</b> ${w.center}`);
+                            if (w.movement) kParts.push(`💨 <b>Movement:</b> ${w.movement}`);
+                            if (w.size) kParts.push(`📏 <b>Size:</b> ${w.size}`);
+                            
+                            kinematicsHtml = `<div class="meso-kinematics">${kParts.join(' &nbsp;|&nbsp; ')}</div>`;
+                        }
                     }
 
                     return `
@@ -208,6 +241,7 @@
                             <span class="tag active">ACTIVE</span>
                             ${nameDisplay}
                         </div>
+                        ${kinematicsHtml}
                         <div class="time-text" style="margin-top: 8px;">
                             Issued: ${formatTime(w.issue_time)} 
                             ${w.expire_time ? `<br>Valid Until: ${formatTime(w.expire_time)}` : ''}
