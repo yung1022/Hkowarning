@@ -111,20 +111,18 @@ def save_json(filepath, data):
     with open(filepath, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
-def get_active_history(history_list, type_code):
+def get_active_history(history_list, type_code, key_name='code'):
     for item in history_list:
-        if item['status'] == 'active' and item['code'] == type_code:
+        if item['status'] == 'active' and item.get(key_name) == type_code:
             return item
     return None
 
 def fetch_warning_info_text(code, lang='en'):
-    """Fetch exact warning details from HKO warningInfo endpoint"""
     url = HKO_WARNINFO_EN if lang == 'en' else HKO_WARNINFO_TC
     try:
         data = requests.get(url, timeout=10).json()
         if "details" in data:
             for item in data["details"]:
-                # Match code (e.g., 'WTS', 'WRAIN')
                 if item.get("warningStatementCode") == code or item.get("subtype") == code:
                     return "\n".join(item.get("contents", []))
     except Exception:
@@ -139,7 +137,7 @@ def paste_icon(img, folder, filename, x, y):
         return True
     return False
 
-def generate_status_image(official_en, official_tc, custom_warns, chances):
+def generate_status_image(official_en, official_tc, custom_warns, chances, current_mesos):
     rs_level = 0
     if "WRAIN" in official_en:
         code = official_en["WRAIN"].get("code", "")
@@ -153,13 +151,14 @@ def generate_status_image(official_en, official_tc, custom_warns, chances):
     width = 800
     off_count = len(official_en)
     cust_count = len(custom_warns)
+    meso_count = len(current_mesos)
     
     chances_h = 0
     if show_red: chances_h += 30
     if show_blk: chances_h += 30
     if chances_h > 0: chances_h += 20
     
-    height = 60 + 50 + (off_count * 90 if off_count else 50) + 50 + (cust_count * 90 if cust_count else 50) + chances_h + 30
+    height = 60 + 50 + (off_count * 90 if off_count else 50) + 50 + (cust_count * 90 if cust_count else 50) + 50 + (meso_count * 90 if meso_count else 50) + chances_h + 30
     
     img = Image.new('RGB', (width, height), color=(43, 45, 49))
     draw = ImageDraw.Draw(img)
@@ -177,6 +176,7 @@ def generate_status_image(official_en, official_tc, custom_warns, chances):
     now_str = datetime.now(ZoneInfo("Asia/Hong_Kong")).strftime("%Y-%m-%d %H:%M:%S HKT")
     draw.text((20, 15), f"HKO Weather Monitoring Board ({now_str})", font=font_title, fill=(255, 255, 255))
 
+    # Official Warnings
     y = 80
     draw.text((20, y), "Official Warnings / 官方警告", font=font_sec, fill=(114, 137, 218))
     y += 35
@@ -199,6 +199,7 @@ def generate_status_image(official_en, official_tc, custom_warns, chances):
             draw.text((75, y + 35), detail, font=font_detail, fill=(180, 180, 180))
             y += 85
 
+    # Custom Warnings
     y += 15
     draw.text((20, y), "Unofficial Parody Warnings / 非官方警告", font=font_sec, fill=(155, 89, 182))
     y += 35
@@ -223,6 +224,22 @@ def generate_status_image(official_en, official_tc, custom_warns, chances):
             draw.text((75, y + 35), detail, font=font_detail, fill=(180, 180, 180))
             y += 85
 
+    # Mesoscale Discussions
+    y += 15
+    draw.text((20, y), "Mesoscale Discussions / 中尺度天氣討論", font=font_sec, fill=(243, 156, 18))
+    y += 35
+    if not current_mesos:
+        draw.text((40, y), "No active discussions / 現時沒有生效討論", font=font_body, fill=(150, 150, 150))
+        y += 40
+    else:
+        for m_id, m_data in current_mesos.items():
+            draw.text((35, y), f"🌪️ Mesoscale Discussion: {m_id}", font=font_body, fill=(243, 156, 18))
+            iss_dt = parse_time(m_data.get('issueTime'))
+            detail = f"Issued: {format_en_time(iss_dt)} | See dashboard map for area."
+            draw.text((75, y + 35), detail, font=font_detail, fill=(180, 180, 180))
+            y += 85
+
+    # Chances
     if show_red or show_blk:
         y += 10
         if show_red:
@@ -235,18 +252,16 @@ def generate_status_image(official_en, official_tc, custom_warns, chances):
 
     img.save(IMAGE_FILE)
 
-def post_to_discord(messages, official_en, official_tc, custom_warns, chances):
+def post_to_discord(messages, official_en, official_tc, custom_warns, chances, current_mesos):
     if not messages: return
-    generate_status_image(official_en, official_tc, custom_warns, chances)
+    generate_status_image(official_en, official_tc, custom_warns, chances, current_mesos)
     
-    # Discord has a 2000 character limit per message. Split if necessary.
     full_text = "\n\n".join(messages)
     chunks = [full_text[i:i+1900] for i in range(0, len(full_text), 1900)]
     
     try:
         for i, chunk in enumerate(chunks):
             payload = {"content": chunk}
-            # Only attach image to the last chunk
             if i == len(chunks) - 1:
                 with open(IMAGE_FILE, "rb") as f:
                     requests.post(WEBHOOK_URL, data={"payload_json": json.dumps(payload)}, files={"file": (IMAGE_FILE, f, "image/png")})
@@ -267,42 +282,76 @@ def main():
     custom_announcement = os.environ.get('CUSTOM_ANNOUNCEMENT', '').strip()
     in_red_chance = os.environ.get('RED_CHANCE', '').strip()
     in_blk_chance = os.environ.get('BLACK_CHANCE', '').strip()
+
+    # Mesoscale environment variables
+    meso_action = os.environ.get('MESO_ACTION', '').strip()
+    meso_id = os.environ.get('MESO_ID', '').strip()
+    meso_coords = os.environ.get('MESO_COORDS', '').strip()
+    meso_text = os.environ.get('MESO_TEXT', '').strip()
     
     now = datetime.now(ZoneInfo("Asia/Hong_Kong"))
     official_en = requests.get(HKO_WARNSUM_EN).json() or {}
     official_tc = requests.get(HKO_WARNSUM_TC).json() or {}
     
-    state_data = load_json(STATE_FILE, {"official": {}, "custom": {}, "chances": {}})
+    state_data = load_json(STATE_FILE, {"official": {}, "custom": {}, "chances": {}, "mesoscale": {}})
     prev_official = state_data.get("official", {})
     chances = state_data.get("chances", {})
-    
-    # Migrate custom warnings to dict format if needed
     current_customs = state_data.get("custom", {})
-    if isinstance(current_customs, dict) and "type" in current_customs:
-        current_customs = {current_customs["type"]: current_customs}
-    elif not isinstance(current_customs, dict):
-        current_customs = {}
+    current_mesos = state_data.get("mesoscale", {})
         
-        # Load history and STRICTLY ensure the new schema keys exist
     history = load_json(HISTORY_FILE, {})
     history.setdefault("official_warnings", [])
     history.setdefault("custom_warnings", [])
+    history.setdefault("mesoscale_discussions", [])
     history.setdefault("announcements", [])
     
-    # Migrate history file from old format if needed
     if "warnings" in history: 
         for w in history["warnings"]:
             if w.get("is_custom"): history["custom_warnings"].append(w)
             else: history["official_warnings"].append(w)
         del history["warnings"]
-
     
     if in_red_chance: chances['red'] = "" if in_red_chance.upper() == 'CLEAR' else in_red_chance
     if in_blk_chance: chances['black'] = "" if in_blk_chance.upper() == 'CLEAR' else in_blk_chance
     
     messages = []
-    has_image_update_only = (in_red_chance or in_blk_chance) and action == 'NONE'
     
+    # Process Mesoscale Actions
+    if meso_action == 'ISSUE' and meso_id:
+        coords_list = []
+        if meso_coords:
+            for pair in meso_coords.split(';'):
+                if ',' in pair:
+                    lat, lng = pair.split(',')
+                    coords_list.append([float(lat), float(lng)])
+        
+        current_mesos[meso_id] = {
+            "id": meso_id,
+            "issueTime": now.isoformat(),
+            "coords": coords_list,
+            "text": meso_text
+        }
+        
+        history['mesoscale_discussions'].append({
+            "id": meso_id,
+            "issue_time": now.isoformat(),
+            "status": "active",
+            "coords": coords_list,
+            "text": meso_text
+        })
+        messages.append(f"🌪️ **Mesoscale Discussion Issued: {meso_id}**\n{meso_text}\n*(Area displayed on dashboard map)*")
+
+    elif meso_action == 'CANCEL' and meso_id:
+        if meso_id in current_mesos:
+            del current_mesos[meso_id]
+            messages.append(f"🛑 **Mesoscale Discussion Cancelled: {meso_id}**")
+            
+        hist_item = get_active_history(history['mesoscale_discussions'], meso_id, key_name='id')
+        if hist_item:
+            hist_item['status'] = 'cancelled'
+            hist_item['end_time'] = now.isoformat()
+            hist_item['duration'] = calculate_duration(hist_item['issue_time'], now.isoformat())
+
     # 1. Handle Standalone Announcements
     if action == 'ANNOUNCE':
         _, en_area = translate_areas(c_area)
@@ -315,7 +364,6 @@ def main():
     elif action in ['ISSUE', 'EXTEND', 'CANCEL'] and c_type:
         zh_name, en_name = get_warning_identifiers(c_type, c_area)
         target_expire_dt = parse_custom_target_time(v_until)
-        
         target_custom = current_customs.get(c_type)
         
         if action == 'ISSUE':
@@ -407,22 +455,17 @@ def main():
                     hist_item['duration'] = calculate_duration(hist_item['issue_time'], exp_dt.isoformat())
                 del current_customs[c_key]
 
-    # 4. Process Official Warnings via actionCode and warningInfo
+    # 4. Process Official Warnings
     for code, en_warn in official_en.items():
         prev_w = prev_official.get(code, {})
         action_code = en_warn.get('actionCode', 'ISSUE')
-        
         zh_n = official_tc.get(code, {}).get('name', en_warn.get('name'))
         en_n = en_warn.get('name')
         
-        # Determine if there is a real update
         if not prev_w or en_warn.get('updateTime') != prev_w.get('updateTime'):
-            
-            # Fetch detailed exact message from warningInfo API
             tc_detail = fetch_warning_info_text(code, 'tc')
             en_detail = fetch_warning_info_text(code, 'en')
             
-            # Fallback formatting if API details missing
             if not tc_detail:
                 iss_t = parse_time(en_warn.get('issueTime'))
                 exp_t = parse_time(en_warn.get('expireTime'))
@@ -438,9 +481,7 @@ def main():
 
             messages.append(f"**[{action_code}] {zh_n} | {en_n}**\n{tc_detail}\n\n{en_detail}")
             
-            # Manage official history based on actionCode
             if action_code in ['ISSUE', 'REISSUE']:
-                # Close old active one if it exists
                 old_hist = get_active_history(history['official_warnings'], code)
                 if old_hist:
                     old_hist['status'] = 'replaced'
@@ -467,7 +508,6 @@ def main():
                     hist_item['end_time'] = en_warn.get('issueTime', now.isoformat())
                     hist_item['duration'] = calculate_duration(hist_item['issue_time'], hist_item['end_time'])
 
-    # Cleanup history silently for official warnings that completely disappeared without CANCEL code
     for code, prev_w in prev_official.items():
         if code not in official_en:
             hist_item = get_active_history(history['official_warnings'], code)
@@ -476,6 +516,7 @@ def main():
                 hist_item['end_time'] = now.isoformat()
                 hist_item['duration'] = calculate_duration(hist_item['issue_time'], now.isoformat())
 
+    has_image_update_only = (in_red_chance or in_blk_chance) and action == 'NONE'
     if has_image_update_only and not messages:
         messages.append("📊 預測機率已手動更新。\nForecast probabilities manually updated.")
 
@@ -486,9 +527,9 @@ def main():
         next_official_state[k] = v_copy
 
     if messages:
-        post_to_discord(messages, official_en, official_tc, current_customs, chances)
+        post_to_discord(messages, official_en, official_tc, current_customs, chances, current_mesos)
         
-    save_json(STATE_FILE, {"official": next_official_state, "custom": current_customs, "chances": chances})
+    save_json(STATE_FILE, {"official": next_official_state, "custom": current_customs, "chances": chances, "mesoscale": current_mesos})
     save_json(HISTORY_FILE, history)
 
 if __name__ == "__main__":
