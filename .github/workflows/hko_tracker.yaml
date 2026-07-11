@@ -44,6 +44,27 @@ on:
         description: 'Black Rainstorm Chance (e.g., 10%. Type CLEAR to remove)'
         type: string
         required: false
+      # --- NEW: Mesoscale Discussion Inputs ---
+      meso_action:
+        description: 'Action for Mesoscale Discussion'
+        type: choice
+        options:
+          - NONE
+          - ISSUE
+          - CANCEL
+        default: 'NONE'
+      meso_id:
+        description: 'Mesoscale Discussion ID (e.g., MD-001)'
+        type: string
+        required: false
+      meso_coords:
+        description: 'Polygon Coordinates (e.g., 22.3,114.1;22.4,114.2;...)'
+        type: string
+        required: false
+      meso_text:
+        description: 'Mesoscale Discussion Details / Analysis'
+        type: string
+        required: false
 
 permissions:
   contents: write
@@ -82,6 +103,11 @@ jobs:
         CUSTOM_ANNOUNCEMENT: ${{ github.event.inputs.announcement }}
         RED_CHANCE: ${{ github.event.inputs.red_chance }}
         BLACK_CHANCE: ${{ github.event.inputs.black_chance }}
+        # Passing the new Mesoscale inputs here:
+        MESO_ACTION: ${{ github.event.inputs.meso_action }}
+        MESO_ID: ${{ github.event.inputs.meso_id }}
+        MESO_COORDS: ${{ github.event.inputs.meso_coords }}
+        MESO_TEXT: ${{ github.event.inputs.meso_text }}
       run: python bot.py
 
     - name: Save Updated State Permanently
