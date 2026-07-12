@@ -5,44 +5,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HKO Weather Tracker Dashboard</title>
     <!-- Leaflet Map CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+    <link rel="stylesheet" href="[https://unpkg.com/leaflet@1.9.4/dist/leaflet.css](https://unpkg.com/leaflet@1.9.4/dist/leaflet.css)" />
+    <link rel="stylesheet" href="[https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css](https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css)" />
     
     <style>
         :root {
-            --bg-color: #1e1f22;
-            --panel-bg: #2b2d31;
-            --text-main: #dbdee1;
-            --text-sub: #949ba4;
-            --accent-red: #ff5f5f;
-            --accent-purple: #9b59b6;
-            --accent-orange: #f39c12;
-            --border: #3f4147;
+            --bg-color: #1e1f22; --panel-bg: #2b2d31; --text-main: #dbdee1;
+            --text-sub: #949ba4; --accent-red: #ff5f5f; --accent-purple: #9b59b6;
+            --accent-orange: #f39c12; --border: #3f4147;
+            
+            --sev-1: #f1c40f; --sev-2: #e67e22; --sev-3: #e74c3c; 
+            --sev-4: #9b59b6; --sev-5: #ff0000;
         }
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            margin: 0; padding: 20px;
-        }
-        .container { max-width: 900px; margin: 0 auto; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 20px; padding-bottom: 120px; }
+        .container { max-width: 1000px; margin: 0 auto; }
         h1, h2, h3 { border-bottom: 2px solid var(--border); padding-bottom: 10px; }
         h3 { border-bottom: 1px solid var(--border); color: var(--text-sub); }
-        .card {
-            background-color: var(--panel-bg);
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-        }
-        .tag {
-            display: inline-block; padding: 3px 8px; border-radius: 4px;
-            font-size: 0.85em; font-weight: bold; margin-right: 10px;
-        }
-        .tag.official { background-color: var(--accent-red); color: #fff; }
-        .tag.custom { background-color: var(--accent-purple); color: #fff; }
-        .tag.meso { background-color: var(--accent-orange); color: #fff; }
-        .tag.active { background-color: #2ecc71; color: #fff; }
+        .card { background-color: var(--panel-bg); border-radius: 8px; padding: 15px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        .tag { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 0.85em; font-weight: bold; margin-right: 10px; color: #fff;}
+        .tag.official { background-color: var(--accent-red); }
+        .tag.custom { background-color: var(--accent-purple); }
+        .tag.meso { background-color: var(--accent-orange); }
+        .tag.active { background-color: #2ecc71; }
         .time-text { color: var(--text-sub); font-size: 0.9em; }
         .announcement-box { border-left: 4px solid #f1c40f; }
         .meso-kinematics { margin-top: 10px; font-size: 0.9em; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 5px; border-left: 3px solid var(--accent-orange); }
@@ -51,307 +35,326 @@
         th, td { text-align: left; padding: 10px; border-bottom: 1px solid var(--border); }
         th { background-color: #1e1f22; }
         
-        #map-container { height: 400px; width: 100%; border-radius: 8px; margin-bottom: 20px; border: 1px solid var(--border); }
+        #map-container { height: 450px; width: 100%; border-radius: 8px; margin-bottom: 10px; border: 1px solid var(--border); position: relative; }
         
-        .admin-tools {
-            background: #111; border: 1px solid #444; border-radius: 8px;
-            padding: 15px; margin-bottom: 20px; display: none;
+        /* Zoom Earth Scrubber Styles */
+        .timeline-controls {
+            background: #2b2d31; border: 1px solid #444; border-radius: 8px; padding: 15px; 
+            margin-bottom: 20px; display: flex; align-items: center; gap: 15px;
         }
+        #timeSlider { flex: 1; accent-color: #f39c12; cursor: pointer; }
+        #currentTimeDisplay { font-family: monospace; font-size: 1.1em; font-weight: bold; min-width: 200px; text-align: center; color: #f39c12; }
+        .status-dot { height: 12px; width: 12px; border-radius: 50%; display: inline-block; background-color: #2ecc71; margin-right: 5px; box-shadow: 0 0 8px #2ecc71;}
+        .status-dot.historical { background-color: #e74c3c; box-shadow: 0 0 8px #e74c3c; }
+
+        .admin-tools { background: #111; border: 1px solid #444; border-radius: 8px; padding: 15px; margin-bottom: 20px; display: none; }
         #generator-map { height: 350px; width: 100%; margin-top: 10px; margin-bottom: 10px; border: 1px solid #555;}
-        textarea {
-            width: 100%; height: 60px; background: #222; color: #0f0;
-            border: 1px solid #444; font-family: monospace; padding: 5px; margin-bottom: 15px;
-        }
+        textarea { width: 100%; height: 60px; background: #222; color: #0f0; border: 1px solid #444; font-family: monospace; padding: 5px; margin-bottom: 15px; }
         .input-group { display: flex; gap: 10px; margin-bottom: 10px; }
         .input-group input { flex: 1; background: #222; color: #fff; border: 1px solid #444; padding: 8px; border-radius: 4px; }
-        
-        button.admin-btn {
-            background: #444; color: white; border: none; padding: 8px 12px;
-            border-radius: 5px; cursor: pointer;
-        }
+        button.admin-btn { background: #444; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; }
         button.admin-btn:hover { background: #666; }
         
-        /* Leaflet popup dark mode override */
-        .leaflet-popup-content-wrapper, .leaflet-popup-tip {
-            background: #2b2d31 !important; color: #dbdee1 !important;
-        }
+        /* Popup Styles */
+        .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: #2b2d31 !important; color: #dbdee1 !important; }
+        .ze-popup { font-family: 'Segoe UI', sans-serif; min-width: 220px; }
+        .ze-header { margin: -14px -20px 10px -20px; padding: 12px 20px; border-radius: 12px 12px 0 0; color: #fff; font-weight: bold; }
+        .ze-body ul { list-style: none; padding: 0; margin: 0; font-size: 13px; line-height: 1.8; }
+        .ze-time { font-size: 11px; color: #aaa; margin-top: 10px; border-top: 1px solid #444; padding-top: 8px; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>📡 Weather Monitoring Dashboard</h1>
+    <h1>📡 Weather Monitoring Board</h1>
     
     <button class="admin-btn" onclick="toggleAdmin()">⚙️ Toggle Admin Tools</button>
     <div class="admin-tools" id="adminTools">
         <h3>📍 Mesoscale Draw & Auto-Calculator</h3>
         <p style="font-size: 0.9em; color: var(--text-sub);">
-            Draw a polygon over the storm cell. Center and diameter are calculated automatically. Fill in the optional fields below and the final payload will be bundled for GitHub Actions.
+            Draw a polygon over the storm. Severity is calculated automatically based on diameter and intensity string (e.g., "70 mm/h").
         </p>
-        
         <div id="generator-map"></div>
-        
         <div class="input-group">
             <input type="text" id="meso-movement" placeholder="Movement (e.g., ENE at 25 km/h)" oninput="updatePayload()">
             <input type="text" id="meso-intensity" placeholder="Intensity (e.g., 50-70 mm/h)" oninput="updatePayload()">
         </div>
-
-        <textarea id="coord-output" readonly placeholder="Payload string will generate here once you draw on the map..."></textarea>
+        <div id="calc-preview" style="margin-bottom:10px; color:#f39c12; font-weight:bold;"></div>
+        <textarea id="coord-output" readonly placeholder="Payload string will generate here..."></textarea>
     </div>
     
-    <h2>⚠️ Current Active Warnings</h2>
-    <div id="map-container"></div> <!-- Active Map for Viewers -->
+    <h2>⚠️ Map Overview & Warning History</h2>
+    <div id="map-container"></div>
+    
+    <!-- Timeline Scrubber -->
+    <div class="timeline-controls">
+        <div id="liveStatus"><span class="status-dot"></span> LIVE</div>
+        <input type="range" id="timeSlider" min="0" max="1000" value="1000">
+        <div id="currentTimeDisplay">Loading...</div>
+    </div>
     
     <div id="active-warnings">Loading...</div>
 
-    <h2>📢 Recent Announcements</h2>
-    <div id="announcements">Loading...</div>
-
-    <h2>📜 Warning History</h2>
+    <h2>📜 Warning Logs</h2>
     <div class="card">
-        <h3>🔴 Official HKO Warnings</h3>
-        <table>
-            <thead><tr><th>Warning Signal</th><th>Issued</th><th>Ended</th><th>Duration</th></tr></thead>
-            <tbody id="history-official"><tr><td colspan="4">Loading...</td></tr></tbody>
-        </table>
-
-        <h3>🔮 Unofficial (Custom) Warnings</h3>
-        <table>
-            <thead><tr><th>Warning Signal</th><th>Issued</th><th>Ended</th><th>Duration</th></tr></thead>
-            <tbody id="history-custom"><tr><td colspan="4">Loading...</td></tr></tbody>
-        </table>
-
+        <h3>🔴 Official Warnings</h3>
+        <table><thead><tr><th>Signal</th><th>Issued</th><th>Ended</th><th>Duration</th></tr></thead><tbody id="history-official"></tbody></table>
+        <h3>🔮 Custom Warnings</h3>
+        <table><thead><tr><th>Signal</th><th>Issued</th><th>Ended</th><th>Duration</th></tr></thead><tbody id="history-custom"></tbody></table>
         <h3>🌪️ Mesoscale Discussions</h3>
-        <table>
-            <thead><tr><th>Discussion ID</th><th>Issued</th><th>Ended</th><th>Duration</th></tr></thead>
-            <tbody id="history-meso"><tr><td colspan="4">Loading...</td></tr></tbody>
-        </table>
+        <table><thead><tr><th>ID</th><th>Issued</th><th>Ended</th><th>Duration</th></tr></thead><tbody id="history-meso"></tbody></table>
     </div>
 </div>
 
 <!-- Leaflet JS -->
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+<script src="[https://unpkg.com/leaflet@1.9.4/dist/leaflet.js](https://unpkg.com/leaflet@1.9.4/dist/leaflet.js)"></script>
+<script src="[https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js](https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js)"></script>
 <script>
-    function formatTime(isoStr) {
-        if (!isoStr) return "--";
-        const d = new Date(isoStr);
-        return d.toLocaleString('zh-HK', { hour12: false });
+    let viewMap, genMap, currentDrawnLayer = null;
+    let viewLayers = [], generatorMapInit = false, liveRadarUrl = null;
+    
+    let historyData = null;
+    const TIME_STEPS = 1000;
+    let maxTimeMs = Date.now();
+    let minTimeMs = maxTimeMs - (7 * 24 * 60 * 60 * 1000); // 7 days ago
+
+    // Formatters
+    function formatTime(isoStr) { return isoStr ? new Date(isoStr).toLocaleString('zh-HK', { hour12: false }) : "--"; }
+
+    // Compass Parser & Haversine Formula for 2-hour forecast
+    const COMPASS = {N:0, NNE:22.5, NE:45, ENE:67.5, E:90, ESE:112.5, SE:135, SSE:157.5, S:180, SSW:202.5, SW:225, WSW:247.5, W:270, WNW:292.5, NW:315, NNW:337.5};
+    function getDestination(lat, lon, bearing, distanceKm) {
+        const R = 6371; // Earth Radius
+        const d = distanceKm / R;
+        const brng = bearing * Math.PI / 180;
+        const lat1 = lat * Math.PI / 180, lon1 = lon * Math.PI / 180;
+        let lat2 = Math.asin(Math.sin(lat1)*Math.cos(d) + Math.cos(lat1)*Math.sin(d)*Math.cos(brng));
+        let lon2 = lon1 + Math.atan2(Math.sin(brng)*Math.sin(d)*Math.cos(lat1), Math.cos(d)-Math.sin(lat1)*Math.sin(lat2));
+        return [lat2 * 180/Math.PI, lon2 * 180/Math.PI];
     }
-
-    let viewMap;
-    let genMap;
-    let viewLayers = [];
-    let generatorMapInit = false;
-    let liveRadarUrl = null;
-    let currentDrawnLayer = null;
-
-    // Fetch Live Radar Layer from Rainviewer API
-    async function fetchLiveRadar() {
-        try {
-            const res = await fetch("https://api.rainviewer.com/public/weather-maps.json");
-            const data = await res.json();
-            const latest = data.radar.past[data.radar.past.length - 1];
-            liveRadarUrl = `https://tilecache.rainviewer.com${latest.path}/256/{z}/{x}/{y}/2/1_1.png`;
-            
-            if (viewMap) L.tileLayer(liveRadarUrl, { opacity: 0.65, zIndex: 10 }).addTo(viewMap);
-            if (genMap) L.tileLayer(liveRadarUrl, { opacity: 0.65, zIndex: 10 }).addTo(genMap);
-        } catch (e) {
-            console.error("Failed to load radar overlay", e);
+    
+    function parseMovement(movementStr) {
+        if (!movementStr) return null;
+        const dirMatch = movementStr.match(/\b(N|NNE|NE|ENE|E|ESE|SE|SSE|S|SSW|SW|WSW|W|WNW|NW|NNW)\b/i);
+        const speedMatch = movementStr.match(/\b(\d+)\s*(km\/h|kph)\b/i);
+        if (dirMatch && speedMatch) {
+            return { bearing: COMPASS[dirMatch[1].toUpperCase()], speed: parseInt(speedMatch[1]) };
         }
+        return null;
     }
 
-    // Embed and Compile Final String
+    // Severity Math
+    function calcSeverity(intensityStr, sizeKmStr) {
+        let rainMatch = intensityStr.match(/(\d+)/);
+        let rain = rainMatch ? parseInt(rainMatch[1]) : 0;
+        let size = parseFloat(sizeKmStr) || 0;
+        
+        let base = 1;
+        if(rain >= 100) base = 5;
+        else if(rain >= 70) base = 4;
+        else if(rain >= 50) base = 3;
+        else if(rain >= 30) base = 2;
+        
+        if (size > 40) base += 1;
+        else if (size > 0 && size < 15) base -= 1;
+        
+        return "S" + Math.max(1, Math.min(5, base));
+    }
+    
+    const SEV_COLORS = { "S1": "var(--sev-1)", "S2": "var(--sev-2)", "S3": "var(--sev-3)", "S4": "var(--sev-4)", "S5": "var(--sev-5)" };
+
+    // Update Generator Payload
     function updatePayload() {
         if (!currentDrawnLayer) return;
-        
-        // 1. Coordinates
         const latlngs = currentDrawnLayer.getLatLngs()[0];
         const coordStr = latlngs.map(ll => `${ll.lat.toFixed(4)},${ll.lng.toFixed(4)}`).join(';');
-        
-        // 2. Center
         const bounds = currentDrawnLayer.getBounds();
         const center = bounds.getCenter();
         const centerStr = `${Math.abs(center.lat).toFixed(1)}°${center.lat >= 0 ? 'N' : 'S'} ${Math.abs(center.lng).toFixed(1)}°${center.lng >= 0 ? 'E' : 'W'}`;
+        const diameterKm = (genMap.distance(bounds.getNorthWest(), bounds.getSouthEast()) / 1000).toFixed(0);
         
-        // 3. Diameter (Diagonal of bounding box in km)
-        const nw = bounds.getNorthWest();
-        const se = bounds.getSouthEast();
-        const diameterKm = (genMap.distance(nw, se) / 1000).toFixed(0) + ' km';
-        
-        // 4 & 5. Manual Inputs
         const movement = document.getElementById('meso-movement').value || '';
         const intensity = document.getElementById('meso-intensity').value || '';
+        const sev = calcSeverity(intensity, diameterKm);
         
-        // Join everything with Pipes
-        const finalPayload = `${coordStr}|${centerStr}|${diameterKm}|${movement}|${intensity}`;
-        document.getElementById('coord-output').value = finalPayload;
+        document.getElementById('calc-preview').innerHTML = `Calculated: ${diameterKm} km Diameter ➔ 🚨 <b>Severity ${sev}</b>`;
+        document.getElementById('coord-output').value = `${coordStr}|${centerStr}|${diameterKm} km|${movement}|${intensity}|${sev}`;
+        
+        // Draw generator forecast line preview
+        if(genMap.forecastLine) { genMap.removeLayer(genMap.forecastLine); }
+        let mvInfo = parseMovement(movement);
+        if(mvInfo) {
+            let dest = getDestination(center.lat, center.lng, mvInfo.bearing, mvInfo.speed * 2); // 2 hours
+            genMap.forecastLine = L.polyline([[center.lat, center.lng], dest], {color: 'cyan', dashArray: '5, 10', weight: 2}).addTo(genMap);
+        }
     }
 
-    // Toggle Admin panel & setup Draw map
+    // Toggle Admin Panel
     function toggleAdmin() {
         const panel = document.getElementById('adminTools');
         panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
-        
         if (panel.style.display === 'block' && !generatorMapInit) {
             generatorMapInit = true;
             genMap = L.map('generator-map').setView([22.3, 114.17], 10);
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(genMap);
-            
-            if (liveRadarUrl) L.tileLayer(liveRadarUrl, { opacity: 0.65, zIndex: 10 }).addTo(genMap);
-            
+            L.tileLayer('https://{s}[.basemaps.cartocdn.com/dark_all/](https://.basemaps.cartocdn.com/dark_all/){z}/{x}/{y}{r}.png').addTo(genMap);
             const drawnItems = new L.FeatureGroup();
             genMap.addLayer(drawnItems);
-            const drawControl = new L.Control.Draw({
-                edit: { featureGroup: drawnItems },
-                draw: { marker: false, circlemarker: false, circle: false, polyline: false,
-                        polygon: { allowIntersection: false } }
-            });
-            genMap.addControl(drawControl);
-
-            genMap.on(L.Draw.Event.CREATED, function (e) {
-                drawnItems.clearLayers(); 
-                currentDrawnLayer = e.layer;
-                drawnItems.addLayer(currentDrawnLayer);
-                updatePayload(); // Auto-calculate and compile
-            });
+            new L.Control.Draw({ edit: { featureGroup: drawnItems }, draw: { marker: false, circlemarker: false, circle: false, polyline: false, polygon: { allowIntersection: false } } }).addTo(genMap);
             
-            genMap.on(L.Draw.Event.EDITED, function () {
-                updatePayload();
-            });
-            
-            genMap.on(L.Draw.Event.DELETED, function () {
-                currentDrawnLayer = null;
-                document.getElementById('coord-output').value = "";
-            });
+            genMap.on(L.Draw.Event.CREATED, function (e) { drawnItems.clearLayers(); currentDrawnLayer = e.layer; drawnItems.addLayer(currentDrawnLayer); updatePayload(); });
+            genMap.on(L.Draw.Event.EDITED, updatePayload);
+            genMap.on(L.Draw.Event.DELETED, function () { currentDrawnLayer = null; document.getElementById('coord-output').value = ""; });
         }
     }
 
+    // Rendering Logic for specific Timestamp
+    function renderMapForTime(targetTimeMs) {
+        if (!historyData || !viewMap) return;
+        
+        viewLayers.forEach(l => viewMap.removeLayer(l));
+        viewLayers = [];
+        
+        const activeHtml = [];
+        
+        // Mesoscale
+        historyData.mesoscale_discussions.forEach(m => {
+            let iss = new Date(m.issue_time).getTime();
+            let end = (m.status !== 'active' && m.end_time) ? new Date(m.end_time).getTime() : Date.now();
+            
+            if (targetTimeMs >= iss && targetTimeMs <= end) {
+                // Find latest update object before target time
+                let updates = m.updates || [{"time": m.issue_time, "coords": m.coords, "center": m.center, "movement": m.movement, "size": m.size, "intensity": m.intensity, "text": m.text}];
+                let validUpdate = [...updates].reverse().find(u => new Date(u.time).getTime() <= targetTimeMs) || updates[0];
+                
+                if (validUpdate && validUpdate.coords && validUpdate.coords.length > 0) {
+                    const sev = validUpdate.severity || 'S1';
+                    const color = SEV_COLORS[sev] || '#f39c12';
+                    
+                    // Draw Polygon
+                    const poly = L.polygon(validUpdate.coords, {color: color, weight: 2, fillOpacity: 0.25}).addTo(viewMap);
+                    
+                    // Forecast Line
+                    let mvInfo = parseMovement(validUpdate.movement);
+                    if(mvInfo) {
+                        let centerObj = poly.getBounds().getCenter();
+                        let dest = getDestination(centerObj.lat, centerObj.lng, mvInfo.bearing, mvInfo.speed * 2);
+                        let line = L.polyline([[centerObj.lat, centerObj.lng], dest], {color: color, dashArray: '5, 8', weight: 2}).addTo(viewMap);
+                        viewLayers.push(line);
+                        
+                        let marker = L.circleMarker(dest, {radius: 4, color: color, fill: true, fillOpacity: 1}).addTo(viewMap);
+                        viewLayers.push(marker);
+                    }
+                    
+                    // Zoom Earth Popup
+                    let popupHtml = `
+                        <div class="ze-popup">
+                            <div class="ze-header" style="background-color: ${color}">🌪️ ${m.id} [${sev}]</div>
+                            <div class="ze-body">
+                                <ul>
+                                    ${validUpdate.center ? `<li>📍 <b>Center:</b> ${validUpdate.center}</li>` : ''}
+                                    ${validUpdate.movement ? `<li>💨 <b>Mvmt (2Hr Track):</b> ${validUpdate.movement}</li>` : ''}
+                                    ${validUpdate.size ? `<li>📏 <b>Size:</b> ${validUpdate.size}</li>` : ''}
+                                    ${validUpdate.intensity ? `<li>🌧️ <b>Rain:</b> ${validUpdate.intensity}</li>` : ''}
+                                </ul>
+                                <div class="ze-time">Data Snapshot: ${formatTime(validUpdate.time)}</div>
+                            </div>
+                        </div>
+                    `;
+                    poly.bindPopup(popupHtml);
+                    viewLayers.push(poly);
+                    
+                    // Add to side panel
+                    activeHtml.push(`
+                        <div class="card" style="border-left: 4px solid ${color}">
+                            <span class="tag" style="background:${color}">Mesoscale ${sev}</span>
+                            <strong>Discussion ID: ${m.id}</strong>
+                            <div class="meso-kinematics">Dir: ${validUpdate.movement || '--'} | Size: ${validUpdate.size || '--'}</div>
+                            <div class="time-text" style="margin-top: 8px;">Snapshot: ${formatTime(validUpdate.time)}</div>
+                        </div>
+                    `);
+                }
+            }
+        });
+        
+        // Add Officials/Customs to panel for that time
+        const addWarnsToPanel = (list, typeCls, typeName) => {
+            list.forEach(w => {
+                let iss = new Date(w.issue_time).getTime();
+                let end = (w.status !== 'active' && w.end_time) ? new Date(w.end_time).getTime() : (w.expire_time ? new Date(w.expire_time).getTime() : Date.now());
+                if (targetTimeMs >= iss && targetTimeMs <= end) {
+                    activeHtml.push(`
+                        <div class="card">
+                            <span class="tag ${typeCls}">${typeName}</span>
+                            <strong>${w.zh_name} | ${w.en_name}</strong>
+                            <div class="time-text" style="margin-top: 8px;">Active at snapshot time</div>
+                        </div>
+                    `);
+                }
+            });
+        };
+        addWarnsToPanel(historyData.official_warnings, 'official', 'Official');
+        addWarnsToPanel(historyData.custom_warnings, 'custom', 'Custom');
+
+        const activeDiv = document.getElementById('active-warnings');
+        activeDiv.innerHTML = activeHtml.length ? activeHtml.join('') : '<div class="card">No active warnings at this specific timestamp.</div>';
+    }
+
+    // Scrubber Logic
+    const slider = document.getElementById('timeSlider');
+    const display = document.getElementById('currentTimeDisplay');
+    const statusDot = document.querySelector('.status-dot');
+    
+    slider.addEventListener('input', function() {
+        const val = parseInt(this.value);
+        if (val === TIME_STEPS) {
+            document.getElementById('liveStatus').innerHTML = '<span class="status-dot"></span> LIVE';
+            display.innerText = "Real-Time Tracking";
+            renderMapForTime(Date.now());
+        } else {
+            const targetMs = minTimeMs + ((maxTimeMs - minTimeMs) * (val / TIME_STEPS));
+            document.getElementById('liveStatus').innerHTML = '<span class="status-dot historical"></span> HISTORICAL';
+            display.innerText = formatTime(new Date(targetMs).toISOString());
+            renderMapForTime(targetMs);
+        }
+    });
+
+    // Fetch and Init
     async function loadData() {
         try {
             const res = await fetch('history.json?t=' + new Date().getTime());
-            const data = await res.json();
+            historyData = await res.json();
             
-            const officialActives = data.official_warnings.filter(w => w.status === 'active');
-            const customActives = data.custom_warnings.filter(w => w.status === 'active');
-            const mesoActives = data.mesoscale_discussions.filter(w => w.status === 'active');
-            const allActives = [...officialActives, ...customActives, ...mesoActives];
-            
-            // Init Main View Map
             if (!viewMap) {
                 viewMap = L.map('map-container').setView([22.3, 114.17], 10);
-                L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-                    attribution: '&copy; CARTO'
-                }).addTo(viewMap);
-                fetchLiveRadar(); 
+                L.tileLayer('https://{s}[.basemaps.cartocdn.com/dark_all/](https://.basemaps.cartocdn.com/dark_all/){z}/{x}/{y}{r}.png').addTo(viewMap);
+                
+                // Fetch radar once for live overlay
+                fetch("[https://api.rainviewer.com/public/weather-maps.json](https://api.rainviewer.com/public/weather-maps.json)").then(r => r.json()).then(data => {
+                    const latest = data.radar.past[data.radar.past.length - 1];
+                    L.tileLayer(`[https://tilecache.rainviewer.com](https://tilecache.rainviewer.com)${latest.path}/256/{z}/{x}/{y}/2/1_1.png`, { opacity: 0.65, zIndex: 10 }).addTo(viewMap);
+                });
             }
-
-            // Draw active Mesoscale polygons on public map
-            viewLayers.forEach(l => viewMap.removeLayer(l));
-            viewLayers = [];
-            mesoActives.forEach(m => {
-                if (m.coords && m.coords.length > 0) {
-                    const poly = L.polygon(m.coords, {color: '#f39c12', fillOpacity: 0.3}).addTo(viewMap);
-                    
-                    let popupHtml = `
-                        <div style="font-family:sans-serif; min-width: 180px;">
-                            <h4 style="margin:0 0 8px 0; border-bottom:1px solid #555; padding-bottom:5px; color:#f39c12;">
-                                🌪️ ID: ${m.id}
-                            </h4>
-                            <ul style="list-style:none; padding:0; margin:0; line-height:1.6; font-size:13px;">
-                    `;
-                    if(m.center) popupHtml += `<li>📍 <b>Center:</b> ${m.center}</li>`;
-                    if(m.movement) popupHtml += `<li>💨 <b>Movement:</b> ${m.movement}</li>`;
-                    if(m.size) popupHtml += `<li>📏 <b>Size:</b> ${m.size}</li>`;
-                    if(m.intensity) popupHtml += `<li>🌧️ <b>Intensity:</b> ${m.intensity}</li>`;
-                    popupHtml += `</ul>`;
-                    if(m.text) popupHtml += `<div style="margin-top:8px; padding-top:8px; border-top:1px solid #555; font-size:12px;">${m.text}</div>`;
-                    popupHtml += `</div>`;
-                    
-                    poly.bindPopup(popupHtml);
-                    viewLayers.push(poly);
-                }
-            });
-
-            // Active Warnings Text List
-            const activeDiv = document.getElementById('active-warnings');
-            if (allActives.length === 0) {
-                activeDiv.innerHTML = '<div class="card">No active warnings.</div>';
-            } else {
-                activeDiv.innerHTML = allActives.map(w => {
-                    let typeClass = 'official';
-                    let typeName = 'Official';
-                    let nameDisplay = `<strong>${w.zh_name} | ${w.en_name}</strong>`;
-                    let kinematicsHtml = '';
-                    
-                    if (w.id.startsWith('CUST')) { 
-                        typeClass = 'custom'; typeName = 'Custom'; 
-                    }
-                    else if (w.id.startsWith('MD-') || w.coords) { 
-                        typeClass = 'meso'; typeName = 'Mesoscale'; 
-                        nameDisplay = `<strong>Discussion ID: ${w.id}</strong><br><span class="time-text">${w.text || ''}</span>`;
-                        
-                        if (w.center || w.movement || w.size || w.intensity) {
-                            let kParts = [];
-                            if (w.center) kParts.push(`📍 <b>Center:</b> ${w.center}`);
-                            if (w.movement) kParts.push(`💨 <b>Dir:</b> ${w.movement}`);
-                            if (w.size) kParts.push(`📏 <b>Size:</b> ${w.size}`);
-                            if (w.intensity) kParts.push(`🌧️ <b>Rain:</b> ${w.intensity}`);
-                            
-                            kinematicsHtml = `<div class="meso-kinematics">${kParts.join(' &nbsp;|&nbsp; ')}</div>`;
-                        }
-                    }
-
-                    return `
-                    <div class="card">
-                        <div>
-                            <span class="tag ${typeClass}">${typeName}</span>
-                            <span class="tag active">ACTIVE</span>
-                            ${nameDisplay}
-                        </div>
-                        ${kinematicsHtml}
-                        <div class="time-text" style="margin-top: 8px;">
-                            Issued: ${formatTime(w.issue_time)} 
-                            ${w.expire_time ? `<br>Valid Until: ${formatTime(w.expire_time)}` : ''}
-                        </div>
-                    </div>
-                `}).join('');
-            }
-
-            // Announcements
-            const annDiv = document.getElementById('announcements');
-            const anns = data.announcements.slice().reverse().slice(0, 5);
-            if (anns.length === 0) { annDiv.innerHTML = '<div class="card">No recent announcements.</div>'; }
-            else {
-                annDiv.innerHTML = anns.map(a => `
-                    <div class="card announcement-box">
-                        <div class="time-text">${formatTime(a.time)}</div>
-                        <div style="margin-top: 5px; white-space: pre-wrap;">${a.text}</div>
-                    </div>
-                `).join('');
+            
+            // Only auto-update if slider is at LIVE
+            if (parseInt(slider.value) === TIME_STEPS) {
+                maxTimeMs = Date.now();
+                minTimeMs = maxTimeMs - (7 * 24 * 60 * 60 * 1000);
+                renderMapForTime(Date.now());
             }
 
             // Tables
-            const makeRows = (list, isMeso = false) => {
-                if(list.length === 0) return '<tr><td colspan="4">No past records.</td></tr>';
-                return list.map(w => `
+            const makeRows = (list, isMeso=false) => list.length === 0 ? '<tr><td colspan="4">No records.</td></tr>' : list.map(w => `
                     <tr>
-                        <td><strong>${isMeso ? w.id : w.zh_name}</strong>
-                        ${!isMeso ? `<br><span style="font-size:0.85em;color:var(--text-sub)">${w.en_name}</span>` : ''}</td>
+                        <td><strong>${isMeso ? w.id : w.zh_name}</strong>${!isMeso ? `<br><span style="font-size:0.85em;color:var(--text-sub)">${w.en_name}</span>` : ''}</td>
                         <td class="time-text">${formatTime(w.issue_time)}</td>
                         <td class="time-text">${formatTime(w.end_time)}</td>
-                        <td>${w.duration}</td>
-                    </tr>
-                `).join('');
-            };
+                        <td>${w.duration || '--'}</td>
+                    </tr>`).join('');
 
-            document.getElementById('history-official').innerHTML = makeRows(data.official_warnings.filter(w => w.status !== 'active').reverse());
-            document.getElementById('history-custom').innerHTML = makeRows(data.custom_warnings.filter(w => w.status !== 'active').reverse());
-            document.getElementById('history-meso').innerHTML = makeRows(data.mesoscale_discussions.filter(w => w.status !== 'active').reverse(), true);
-
-        } catch (e) {
-            console.error("Failed to load data:", e);
-        }
+            document.getElementById('history-official').innerHTML = makeRows(historyData.official_warnings.filter(w => w.status !== 'active').reverse());
+            document.getElementById('history-custom').innerHTML = makeRows(historyData.custom_warnings.filter(w => w.status !== 'active').reverse());
+            document.getElementById('history-meso').innerHTML = makeRows(historyData.mesoscale_discussions.filter(w => w.status !== 'active').reverse(), true);
+        } catch (e) { console.error("Failed to load data:", e); }
     }
 
     loadData();
