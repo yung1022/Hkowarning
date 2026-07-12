@@ -1,15 +1,16 @@
 import os
 import json
 import requests
-from datetime import datetime
+import re
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from PIL import Image, ImageDraw, ImageFont
 
 WEBHOOK_URL = os.environ.get('DISCORD_WEBHOOK_URL')
-HKO_WARNSUM_EN = '[https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=en](https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=en)'
-HKO_WARNSUM_TC = '[https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=tc](https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=tc)'
-HKO_WARNINFO_EN = '[https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warningInfo&lang=en](https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warningInfo&lang=en)'
-HKO_WARNINFO_TC = '[https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warningInfo&lang=tc](https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warningInfo&lang=tc)'
+HKO_WARNSUM_EN = 'https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=en'
+HKO_WARNSUM_TC = 'https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=tc'
+HKO_WARNINFO_EN = 'https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warningInfo&lang=en'
+HKO_WARNINFO_TC = 'https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warningInfo&lang=tc'
 
 STATE_FILE = 'warning_state.json'
 HISTORY_FILE = 'history.json'
@@ -48,7 +49,7 @@ UNOFFICIAL_ASSETS = {
 }
 
 def translate_areas(area_str):
-    if not area_str or str(area_str).strip().lower() == 'none':
+    if not area_str or str(area_str).strip().lower() == 'none': 
         return 'None', 'None'
     areas = [a.strip() for a in area_str.split(',')]
     zh_areas = [AREA_MAP.get(a, a) for a in areas]
@@ -56,21 +57,19 @@ def translate_areas(area_str):
 
 def get_template_announcement(w_type, en_area):
     area_text = en_area if en_area != 'None' else "most parts of Hong Kong"
-    if w_type == 'White Rainstorm Watch':
-        return f"1. Expect heavy rain of about 10mm/h to form over the next 2-3 hours.\n2. About 10mm/h of heavy rain is currently impacting on {area_text}."
-    elif w_type == 'Blue Rainstorm Warning':
-        return "1. Expect heavy rain of about 30mm/h to form over the next 2-3 hours.\n2. About 20mm/h of heavy rain is currently impacting on most parts of Hong Kong."
-    elif w_type == 'Red Rainstorm Watch':
-        return "The chance of issuing Red Rainstorm Warning has reached more than 70%, it is very likely that a 50mm/h heavy rain will impact Hong Kong very soon."
-    elif w_type == 'Black Rainstorm Watch':
-        return "The chance of issuing Black Rainstorm Warning has reached more than 70%, it is very likely that a 70mm/h heavy rain will impact Hong Kong very soon."
-    elif w_type == 'Severe Thunderstorm Emergency':
-        return f"There's currently a huge thunderstorm on {en_area}."
+    if w_type == 'White Rainstorm Watch': return f"1. Expect heavy rain of about 10mm/h to form over the next 2-3 hours.\n2. About 10mm/h of heavy rain is currently impacting on {area_text}."
+    elif w_type == 'Blue Rainstorm Warning': return "1. Expect heavy rain of about 30mm/h to form over the next 2-3 hours.\n2. About 20mm/h of heavy rain is currently impacting on most parts of Hong Kong."
+    elif w_type == 'Red Rainstorm Watch': return "The chance of issuing Red Rainstorm Warning has reached more than 70%, it is very likely that a 50mm/h heavy rain will impact Hong Kong very soon."
+    elif w_type == 'Black Rainstorm Watch': return "The chance of issuing Black Rainstorm Warning has reached more than 70%, it is very likely that a 70mm/h heavy rain will impact Hong Kong very soon."
+    elif w_type == 'Severe Thunderstorm Emergency': return f"There's currently a huge thunderstorm on {en_area}."
     return ""
 
 def parse_time(iso_str):
     if not iso_str: return None
-    return datetime.fromisoformat(iso_str)
+    try:
+        return datetime.fromisoformat(iso_str)
+    except Exception:
+        return None
 
 def format_zh_time(dt):
     if not dt: return ""
@@ -90,7 +89,8 @@ def parse_custom_target_time(time_str):
         now = datetime.now(ZoneInfo("Asia/Hong_Kong"))
         parts = time_str.strip().split(":")
         return now.replace(hour=int(parts[0]), minute=int(parts[1]), second=0, microsecond=0)
-    except Exception: return None
+    except Exception: 
+        return None
 
 def get_warning_identifiers(w_type, area="None"):
     if w_type == 'White Rainstorm Watch': 
@@ -130,7 +130,7 @@ def save_json(filepath, data):
 
 def get_active_history(history_list, type_code, key_name='code'):
     for item in history_list:
-        if item['status'] == 'active' and item.get(key_name) == type_code:
+        if item.get('status') == 'active' and item.get(key_name) == type_code:
             return item
     return None
 
@@ -149,9 +149,12 @@ def fetch_warning_info_text(code, lang='en'):
 def paste_icon(img, folder, filename, x, y):
     path = f"assets/{folder}/{filename}.png"
     if os.path.exists(path):
-        icon = Image.open(path).convert("RGBA").resize((32, 32))
-        img.paste(icon, (x, int(y)), icon)
-        return True
+        try:
+            icon = Image.open(path).convert("RGBA").resize((32, 32))
+            img.paste(icon, (x, int(y)), icon)
+            return True
+        except Exception:
+            pass
     return False
 
 def generate_status_image(official_en, official_tc, custom_warns, chances, current_mesos):
@@ -325,11 +328,20 @@ def main():
         meso_size = parts[2] if len(parts) > 2 else ""
         meso_movement = parts[3] if len(parts) > 3 else ""
         meso_intensity = parts[4] if len(parts) > 4 else ""
-        meso_severity = parts[5] if len(parts) > 5 else "S1"
+        meso_severity = parts[5] if len(parts) > 5 else calculate_severity(meso_size, meso_intensity)
     
     now = datetime.now(ZoneInfo("Asia/Hong_Kong"))
-    official_en = requests.get(HKO_WARNSUM_EN).json() or {}
-    official_tc = requests.get(HKO_WARNSUM_TC).json() or {}
+    
+    # Fetch Official Data safely
+    try:
+        official_en = requests.get(HKO_WARNSUM_EN, timeout=10).json() or {}
+    except Exception:
+        official_en = {}
+        
+    try:
+        official_tc = requests.get(HKO_WARNSUM_TC, timeout=10).json() or {}
+    except Exception:
+        official_tc = {}
     
     state_data = load_json(STATE_FILE, {"official": {}, "custom": {}, "chances": {}, "mesoscale": {}})
     prev_official = state_data.get("official", {})
@@ -352,8 +364,11 @@ def main():
         if meso_coords:
             for pair in meso_coords.split(';'):
                 if ',' in pair:
-                    lat, lng = pair.split(',')
-                    coords_list.append([float(lat), float(lng)])
+                    try:
+                        lat, lng = pair.split(',')
+                        coords_list.append([float(lat), float(lng)])
+                    except ValueError:
+                        continue
         
         current_mesos[meso_id] = {
             "id": meso_id, "issueTime": now.isoformat(),
@@ -390,8 +405,11 @@ def main():
                 coords_list = []
                 for pair in meso_coords.split(';'):
                     if ',' in pair:
-                        lat, lng = pair.split(',')
-                        coords_list.append([float(lat), float(lng)])
+                        try:
+                            lat, lng = pair.split(',')
+                            coords_list.append([float(lat), float(lng)])
+                        except ValueError:
+                            continue
                 if coords_list: m_data['coords'] = coords_list
             else:
                 coords_list = m_data.get('coords', [])
@@ -524,7 +542,7 @@ def main():
 
         if not is_official_upg and c_warn.get('expireTime'):
             exp_dt = parse_time(c_warn['expireTime'])
-            if now >= exp_dt:
+            if exp_dt and now >= exp_dt:
                 messages.append(f"{zh_c} 有效時間在{format_zh_time(exp_dt)}終止。\n{en_c} valid until {format_en_time(exp_dt)} has terminated.")
                 hist_item = get_active_history(history['custom_warnings'], c_key)
                 if hist_item:
