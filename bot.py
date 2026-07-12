@@ -1,16 +1,15 @@
 import os
 import json
 import requests
-import re
-from datetime import datetime, timedelta
+from datetime import datetime
 from zoneinfo import ZoneInfo
 from PIL import Image, ImageDraw, ImageFont
 
 WEBHOOK_URL = os.environ.get('DISCORD_WEBHOOK_URL')
-HKO_WARNSUM_EN = 'https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=en'
-HKO_WARNSUM_TC = 'https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=tc'
-HKO_WARNINFO_EN = 'https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warningInfo&lang=en'
-HKO_WARNINFO_TC = 'https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warningInfo&lang=tc'
+HKO_WARNSUM_EN = '[https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=en](https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=en)'
+HKO_WARNSUM_TC = '[https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=tc](https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=tc)'
+HKO_WARNINFO_EN = '[https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warningInfo&lang=en](https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warningInfo&lang=en)'
+HKO_WARNINFO_TC = '[https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warningInfo&lang=tc](https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warningInfo&lang=tc)'
 
 STATE_FILE = 'warning_state.json'
 HISTORY_FILE = 'history.json'
@@ -34,81 +33,6 @@ def calculate_severity(size_str, intensity_str):
         return f"S{s_score}"
     except Exception:
         return "S1"
-
-AREA_MAP = {
-    'Kowloon': '九龍', 'Outlying Islands': '離島',
-    'West NT': '新界西', 'East NT': '新界東', 'HK Island': '香港島'
-}
-
-UNOFFICIAL_ASSETS = {
-    'White Rainstorm Watch': 'white_rainstorm',
-    'Blue Rainstorm Warning': 'blue_rainstorm',
-    'Red Rainstorm Watch': 'red_watch',
-    'Black Rainstorm Watch': 'black_watch',
-    'Severe Thunderstorm Emergency': 'severe_thunderstorm'
-}
-
-def translate_areas(area_str):
-    if not area_str or str(area_str).strip().lower() == 'none': return 'None', 'None'
-    areas = [a.strip() for a in area_str.split(',')]
-    zh_areas = [AREA_MAP.get(a, a) for a in areas]
-    return "及".join(zh_areas), " and ".join(areas)
-
-def get_template_announcement(w_type, en_area):
-    area_text = en_area if en_area != 'None' else "most parts of Hong Kong"
-    if w_type == 'White Rainstorm Watch': return f"1. Expect heavy rain of about 10mm/h to form over the next 2-3 hours.\n2. About 10mm/h of heavy rain is currently impacting on {area_text}."
-    elif w_type == 'Blue Rainstorm Warning': return "1. Expect heavy rain of about 30mm/h to form over the next 2-3 hours.\n2. About 20mm/h of heavy rain is currently impacting on most parts of Hong Kong."
-    elif w_type == 'Red Rainstorm Watch': return "The chance of issuing Red Rainstorm Warning has reached more than 70%, it is very likely that a 50mm/h heavy rain will impact Hong Kong very soon."
-    elif w_type == 'Black Rainstorm Watch': return "The chance of issuing Black Rainstorm Warning has reached more than 70%, it is very likely that a 70mm/h heavy rain will impact Hong Kong very soon."
-    elif w_type == 'Severe Thunderstorm Emergency': return f"There's currently a huge thunderstorm on {en_area}."
-    return ""
-
-def parse_time(iso_str):
-    if not iso_str: return None
-    return datetime.fromisoformat(iso_str)
-
-def format_zh_time(dt):
-    if not dt: return ""
-    hour = dt.hour
-    minute = dt.minute
-    period = "上午" if hour < 12 else "下午"
-    h = 12 if hour == 0 else (hour if hour <= 12 else hour - 12)
-    return f"{period}{h}:{minute:02d}"
-
-def format_en_time(dt):
-    if not dt: return ""
-    return dt.strftime("%I:%M %p").lstrip('0').lower().replace("am", "a.m.").replace("pm", "p.m.")
-
-def parse_custom_target_time(time_str):
-    if not time_str or ":" not in time_str: return None
-    try:
-        now = datetimeHere are the complete, fully updated scripts for `bot.py` and `index.html`. 
-
-We have made three major architectural upgrades to achieve what you asked for:
-1. **S1-S5 Severity Calculator:** When you enter intensity and draw the polygon in the admin tools, `index.html` automatically calculates a severity rating (S1-S5) based on the diameter of your shape and the regex-parsed rain intensity. It embeds this as the 6th field in your payload.
-2. **2-Hour Forecast Line:** The frontend parses your movement string (e.g., "ENE at 25 km/h"). It extracts the compass direction and speed, uses Haversine math to find the geographical point 2 hours into the future, and draws a dashed forecast line on the map.
-3. **Zoom Earth Timeline Scrubber:** `history.json` now records an `updates` array for every change. `index.html` features a bottom slider covering the last 7 days. As you scrub back in time, the map dynamically repaints the polygons, forecast lines, and warning popups exactly as they were at that specific minute in history.
-
-### 1. `bot.py`
-Replace your existing file. This version supports parsing the 6th payload item (Severity) and transforms the Mesoscale history format to store a chronological `updates` array for the Zoom Earth style timeline scrubber.
-
-```python
-import os
-import json
-import requests
-from datetime import datetime
-from zoneinfo import ZoneInfo
-from PIL import Image, ImageDraw, ImageFont
-
-WEBHOOK_URL = os.environ.get('DISCORD_WEBHOOK_URL')
-HKO_WARNSUM_EN = '[https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=en](https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=en)'
-HKO_WARNSUM_TC = '[https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=tc](https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=tc)'
-HKO_WARNINFO_EN = '[https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warningInfo&lang=en](https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warningInfo&lang=en)'
-HKO_WARNINFO_TC = '[https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warningInfo&lang=tc](https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warningInfo&lang=tc)'
-
-STATE_FILE = 'warning_state.json'
-HISTORY_FILE = 'history.json'
-IMAGE_FILE = 'current_warnings.png'
 
 AREA_MAP = {
     'Kowloon': '九龍', 'Outlying Islands': '離島',
