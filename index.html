@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HKO Weather Tracker Dashboard</title>
     <!-- Leaflet Map CSS -->
-    <link rel="stylesheet" href="[https://unpkg.com/leaflet@1.9.4/dist/leaflet.css](https://unpkg.com/leaflet@1.9.4/dist/leaflet.css)" />
-    <link rel="stylesheet" href="[https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css](https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css)" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
     
     <style>
         :root {
@@ -107,8 +107,8 @@
 </div>
 
 <!-- Leaflet JS -->
-<script src="[https://unpkg.com/leaflet@1.9.4/dist/leaflet.js](https://unpkg.com/leaflet@1.9.4/dist/leaflet.js)"></script>
-<script src="[https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js](https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js)"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
 <script>
     let viewMap, genMap, currentDrawnLayer = null;
     let viewLayers = [], generatorMapInit = false, liveRadarUrl = null;
@@ -196,7 +196,7 @@
         if (panel.style.display === 'block' && !generatorMapInit) {
             generatorMapInit = true;
             genMap = L.map('generator-map').setView([22.3, 114.17], 10);
-            L.tileLayer('https://{s}[.basemaps.cartocdn.com/dark_all/](https://.basemaps.cartocdn.com/dark_all/){z}/{x}/{y}{r}.png').addTo(genMap);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(genMap);
             const drawnItems = new L.FeatureGroup();
             genMap.addLayer(drawnItems);
             new L.Control.Draw({ edit: { featureGroup: drawnItems }, draw: { marker: false, circlemarker: false, circle: false, polyline: false, polygon: { allowIntersection: false } } }).addTo(genMap);
@@ -326,12 +326,12 @@
             
             if (!viewMap) {
                 viewMap = L.map('map-container').setView([22.3, 114.17], 10);
-                L.tileLayer('https://{s}[.basemaps.cartocdn.com/dark_all/](https://.basemaps.cartocdn.com/dark_all/){z}/{x}/{y}{r}.png').addTo(viewMap);
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(viewMap);
                 
                 // Fetch radar once for live overlay
-                fetch("[https://api.rainviewer.com/public/weather-maps.json](https://api.rainviewer.com/public/weather-maps.json)").then(r => r.json()).then(data => {
+                fetch("https://api.rainviewer.com/public/weather-maps.json").then(r => r.json()).then(data => {
                     const latest = data.radar.past[data.radar.past.length - 1];
-                    L.tileLayer(`[https://tilecache.rainviewer.com](https://tilecache.rainviewer.com)${latest.path}/256/{z}/{x}/{y}/2/1_1.png`, { opacity: 0.65, zIndex: 10 }).addTo(viewMap);
+                    L.tileLayer(`https://tilecache.rainviewer.com${latest.path}/256/{z}/{x}/{y}/2/1_1.png`, { opacity: 0.65, zIndex: 10 }).addTo(viewMap);
                 });
             }
             
