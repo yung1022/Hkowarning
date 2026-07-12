@@ -76,8 +76,7 @@ def parse_custom_target_time(time_str):
 def get_warning_identifiers(w_type, area="None"):
     if w_type == 'White Rainstorm Watch': 
         zh_a, en_a = translate_areas(area)
-        if en_a != 'None':
-            return f"{zh_a}白色暴雨戒備信號", f"White Rainstorm Watch for {en_a}"
+        if en_a != 'None': return f"{zh_a}白色暴雨戒備信號", f"White Rainstorm Watch for {en_a}"
         return "白色暴雨戒備信號", "White Rainstorm Watch"
     if w_type == 'Blue Rainstorm Warning': return "藍色暴雨警告信號", w_type
     if w_type == 'Red Rainstorm Watch': return "紅色暴雨戒備信號", w_type
@@ -102,8 +101,7 @@ def calculate_duration(issue_iso, end_iso):
 def load_json(filepath, default):
     if os.path.exists(filepath):
         try:
-            with open(filepath, 'r', encoding='utf-8') as f:
-                return json.load(f)
+            with open(filepath, 'r', encoding='utf-8') as f: return json.load(f)
         except Exception: pass
     return default
 
@@ -158,7 +156,6 @@ def generate_status_image(official_en, official_tc, custom_warns, chances, curre
     if show_blk: chances_h += 30
     if chances_h > 0: chances_h += 20
     
-    # Increased Meso multiplier to 110 to fit new kinematics text
     height = 60 + 50 + (off_count * 90 if off_count else 50) + 50 + (cust_count * 90 if cust_count else 50) + 50 + (meso_count * 110 if meso_count else 50) + chances_h + 30
     
     img = Image.new('RGB', (width, height), color=(43, 45, 49))
@@ -236,14 +233,14 @@ def generate_status_image(official_en, official_tc, custom_warns, chances, curre
         for m_id, m_data in current_mesos.items():
             draw.text((35, y), f"🌪️ Mesoscale Discussion: {m_id}", font=font_body, fill=(243, 156, 18))
             
-            # Kinematics line
             kinematics = []
             if m_data.get('center'): kinematics.append(f"Loc: {m_data['center']}")
             if m_data.get('movement'): kinematics.append(f"Dir: {m_data['movement']}")
             if m_data.get('size'): kinematics.append(f"Size: {m_data['size']}")
+            if m_data.get('intensity'): kinematics.append(f"Rain: {m_data['intensity']}")
+            
             k_str = " | ".join(kinematics)
-            if k_str:
-                draw.text((75, y + 35), k_str, font=font_detail, fill=(255, 200, 100))
+            if k_str: draw.text((75, y + 35), k_str, font=font_detail, fill=(255, 200, 100))
                 
             iss_dt = parse_time(m_data.get('issueTime'))
             detail = f"Issued: {format_en_time(iss_dt)} | See dashboard map for area."
@@ -294,14 +291,20 @@ def main():
     in_red_chance = os.environ.get('RED_CHANCE', '').strip()
     in_blk_chance = os.environ.get('BLACK_CHANCE', '').strip()
 
-    # Mesoscale environment variables
     meso_action = os.environ.get('MESO_ACTION', '').strip()
     meso_id = os.environ.get('MESO_ID', '').strip()
-    meso_coords = os.environ.get('MESO_COORDS', '').strip()
     meso_text = os.environ.get('MESO_TEXT', '').strip()
-    meso_center = os.environ.get('MESO_CENTER', '').strip()
-    meso_movement = os.environ.get('MESO_MOVEMENT', '').strip()
-    meso_size = os.environ.get('MESO_SIZE', '').strip()
+    
+    # --- Unpack the embedded payload ---
+    meso_payload = os.environ.get('MESO_PAYLOAD', '').strip()
+    meso_coords, meso_center, meso_size, meso_movement, meso_intensity = "", "", "", "", ""
+    if meso_payload:
+        parts = meso_payload.split('|')
+        meso_coords = parts[0] if len(parts) > 0 else ""
+        meso_center = parts[1] if len(parts) > 1 else ""
+        meso_size = parts[2] if len(parts) > 2 else ""
+        meso_movement = parts[3] if len(parts) > 3 else ""
+        meso_intensity = parts[4] if len(parts) > 4 else ""
     
     now = datetime.now(ZoneInfo("Asia/Hong_Kong"))
     official_en = requests.get(HKO_WARNSUM_EN).json() or {}
@@ -314,23 +317,15 @@ def main():
     current_mesos = state_data.get("mesoscale", {})
         
     history = load_json(HISTORY_FILE, {})
-    history.setdefault("official_warnings", [])
-    history.setdefault("custom_warnings", [])
-    history.setdefault("mesoscale_discussions", [])
-    history.setdefault("announcements", [])
-    
-    if "warnings" in history: 
-        for w in history["warnings"]:
-            if w.get("is_custom"): history["custom_warnings"].append(w)
-            else: history["official_warnings"].append(w)
-        del history["warnings"]
+    for k in ["official_warnings", "custom_warnings", "mesoscale_discussions", "announcements"]:
+        history.setdefault(k, [])
     
     if in_red_chance: chances['red'] = "" if in_red_chance.upper() == 'CLEAR' else in_red_chance
     if in_blk_chance: chances['black'] = "" if in_blk_chance.upper() == 'CLEAR' else in_blk_chance
     
     messages = []
     
-    # Process Mesoscale Actions
+    # 1. Mesoscale Discussion Logic
     if meso_action == 'ISSUE' and meso_id:
         coords_list = []
         if meso_coords:
@@ -340,50 +335,71 @@ def main():
                     coords_list.append([float(lat), float(lng)])
         
         current_mesos[meso_id] = {
-            "id": meso_id,
-            "issueTime": now.isoformat(),
-            "coords": coords_list,
-            "text": meso_text,
-            "center": meso_center,
-            "movement": meso_movement,
-            "size": meso_size
+            "id": meso_id, "issueTime": now.isoformat(),
+            "coords": coords_list, "text": meso_text, "center": meso_center,
+            "movement": meso_movement, "size": meso_size, "intensity": meso_intensity
         }
         
         history['mesoscale_discussions'].append({
-            "id": meso_id,
-            "issue_time": now.isoformat(),
-            "status": "active",
-            "coords": coords_list,
-            "text": meso_text,
-            "center": meso_center,
-            "movement": meso_movement,
-            "size": meso_size
+            "id": meso_id, "issue_time": now.isoformat(), "status": "active",
+            "coords": coords_list, "text": meso_text, "center": meso_center,
+            "movement": meso_movement, "size": meso_size, "intensity": meso_intensity
         })
         
-        # Build Discord Message text
         msg = f"🌪️ **Mesoscale Discussion Issued: {meso_id}**\n"
         if meso_center: msg += f"📍 **Center:** {meso_center}\n"
         if meso_movement: msg += f"💨 **Movement:** {meso_movement}\n"
         if meso_size: msg += f"📏 **Size:** {meso_size}\n"
-        
-        if meso_text:
-            msg += f"\n{meso_text}\n"
+        if meso_intensity: msg += f"🌧️ **Intensity:** {meso_intensity}\n"
+        if meso_text: msg += f"\n{meso_text}\n"
         msg += f"\n*(Area displayed on dashboard map)*"
-        
         messages.append(msg)
+
+    elif meso_action == 'UPDATE' and meso_id:
+        if meso_id in current_mesos:
+            m_data = current_mesos[meso_id]
+            hist_item = get_active_history(history['mesoscale_discussions'], meso_id, key_name='id')
+            
+            if meso_coords:
+                coords_list = []
+                for pair in meso_coords.split(';'):
+                    if ',' in pair:
+                        lat, lng = pair.split(',')
+                        coords_list.append([float(lat), float(lng)])
+                if coords_list:
+                    m_data['coords'] = coords_list
+                    if hist_item: hist_item['coords'] = coords_list
+            
+            # Update kinematics if payload provided them
+            if meso_center: m_data['center'] = meso_center; hist_item['center'] = meso_center if hist_item else None
+            if meso_movement: m_data['movement'] = meso_movement; hist_item['movement'] = meso_movement if hist_item else None
+            if meso_size: m_data['size'] = meso_size; hist_item['size'] = meso_size if hist_item else None
+            if meso_intensity: m_data['intensity'] = meso_intensity; hist_item['intensity'] = meso_intensity if hist_item else None
+            
+            if meso_text:
+                m_data['text'] = meso_text
+                if hist_item: hist_item['text'] = meso_text
+                
+            msg = f"🔄 **Mesoscale Discussion Updated: {meso_id}**\n"
+            if m_data.get('center'): msg += f"📍 **Center:** {m_data['center']}\n"
+            if m_data.get('movement'): msg += f"💨 **Movement:** {m_data['movement']}\n"
+            if m_data.get('size'): msg += f"📏 **Size:** {m_data['size']}\n"
+            if m_data.get('intensity'): msg += f"🌧️ **Intensity:** {m_data['intensity']}\n"
+            if m_data.get('text'): msg += f"\n{m_data['text']}\n"
+            msg += f"\n*(Area and stats updated on dashboard map)*"
+            messages.append(msg)
 
     elif meso_action == 'CANCEL' and meso_id:
         if meso_id in current_mesos:
             del current_mesos[meso_id]
             messages.append(f"🛑 **Mesoscale Discussion Cancelled: {meso_id}**")
-            
         hist_item = get_active_history(history['mesoscale_discussions'], meso_id, key_name='id')
         if hist_item:
             hist_item['status'] = 'cancelled'
             hist_item['end_time'] = now.isoformat()
             hist_item['duration'] = calculate_duration(hist_item['issue_time'], now.isoformat())
 
-    # 1. Handle Standalone Announcements
+    # 2. Custom Announcements & Parody Warnings
     if action == 'ANNOUNCE':
         _, en_area = translate_areas(c_area)
         final_announcement = custom_announcement if custom_announcement else get_template_announcement(c_type, en_area)
@@ -391,7 +407,6 @@ def main():
             messages.append(f"📢 **Announcement / 特別報告:**\n{final_announcement}")
             history['announcements'].append({"time": now.isoformat(), "text": final_announcement})
 
-    # 2. Handle Custom Warnings Actions (Multiple Active Allowed)
     elif action in ['ISSUE', 'EXTEND', 'CANCEL'] and c_type:
         zh_name, en_name = get_warning_identifiers(c_type, c_area)
         target_expire_dt = parse_custom_target_time(v_until)
@@ -431,11 +446,9 @@ def main():
             current_customs[c_type] = new_custom
             
             history['custom_warnings'].append({
-                "id": f"CUST-{int(now.timestamp())}",
-                "code": c_type,
+                "id": f"CUST-{int(now.timestamp())}", "code": c_type,
                 "zh_name": zh_name, "en_name": en_name,
-                "issue_time": now.isoformat(),
-                "expire_time": new_custom['expireTime'],
+                "issue_time": now.isoformat(), "expire_time": new_custom['expireTime'],
                 "status": "active"
             })
 
@@ -455,12 +468,11 @@ def main():
                 hist_item['duration'] = calculate_duration(hist_item['issue_time'], now.isoformat())
             del current_customs[c_type]
 
-    # 3. Custom Native Expiry / Auto-Cancel
+    # Auto Cancel logic
     for c_key in list(current_customs.keys()):
         c_warn = current_customs[c_key]
         zh_c, en_c = get_warning_identifiers(c_warn['type'], c_warn.get('area', 'None'))
         is_official_upg = False
-        
         if "Watch" in c_warn['type']:
             rcode = official_en.get("WRAIN", {}).get("code", "")
             if (c_warn['type'] == 'White Rainstorm Watch' and rcode in ["A", "R", "B"]) or \
@@ -486,7 +498,7 @@ def main():
                     hist_item['duration'] = calculate_duration(hist_item['issue_time'], exp_dt.isoformat())
                 del current_customs[c_key]
 
-    # 4. Process Official Warnings
+    # 3. Official Warnings
     for code, en_warn in official_en.items():
         prev_w = prev_official.get(code, {})
         action_code = en_warn.get('actionCode', 'ISSUE')
@@ -503,16 +515,16 @@ def main():
                 if action_code == 'CANCEL':
                     tc_detail = f"{zh_n} 在{format_zh_time(now)}取消。"
                     en_detail = f"{en_n} has been cancelled at {format_en_time(now)}."
-                elif action_code == 'EXTEND':
-                    tc_detail = f"{zh_n} 有效時間延長至{format_zh_time(exp_t)}。"
-                    en_detail = f"{en_n} has been extended until {format_en_time(exp_t)}."
+                elif action_code in ['EXTEND', 'REISSUE']:
+                    tc_detail = f"{zh_n} 有效時間延長/更新至{format_zh_time(exp_t)}。"
+                    en_detail = f"{en_n} has been updated/extended until {format_en_time(exp_t)}."
                 else:
                     tc_detail = f"{zh_n} 在 {format_zh_time(iss_t)}發出。"
                     en_detail = f"{en_n} has been issued at {format_en_time(iss_t)}."
 
             messages.append(f"**[{action_code}] {zh_n} | {en_n}**\n{tc_detail}\n\n{en_detail}")
             
-            if action_code in ['ISSUE', 'REISSUE']:
+            if action_code == 'ISSUE':
                 old_hist = get_active_history(history['official_warnings'], code)
                 if old_hist:
                     old_hist['status'] = 'replaced'
@@ -520,17 +532,17 @@ def main():
                     old_hist['duration'] = calculate_duration(old_hist['issue_time'], now.isoformat())
                     
                 history['official_warnings'].append({
-                    "id": f"OFF-{code}-{int(now.timestamp())}",
-                    "code": code,
+                    "id": f"OFF-{code}-{int(now.timestamp())}", "code": code,
                     "zh_name": zh_n, "en_name": en_n,
                     "issue_time": en_warn.get('issueTime', now.isoformat()),
                     "expire_time": en_warn.get('expireTime'),
                     "status": "active"
                 })
                 
-            elif action_code in ['EXTEND', 'UPDATE']:
+            elif action_code in ['EXTEND', 'UPDATE', 'REISSUE']:
                 hist_item = get_active_history(history['official_warnings'], code)
-                if hist_item: hist_item['expire_time'] = en_warn.get('expireTime')
+                if hist_item: 
+                    hist_item['expire_time'] = en_warn.get('expireTime')
                 
             elif action_code == 'CANCEL':
                 hist_item = get_active_history(history['official_warnings'], code)
@@ -557,9 +569,7 @@ def main():
         v_copy['tc_name'] = official_tc.get(k, {}).get('name', v.get('name'))
         next_official_state[k] = v_copy
 
-    if messages:
-        post_to_discord(messages, official_en, official_tc, current_customs, chances, current_mesos)
-        
+    if messages: post_to_discord(messages, official_en, official_tc, current_customs, chances, current_mesos)
     save_json(STATE_FILE, {"official": next_official_state, "custom": current_customs, "chances": chances, "mesoscale": current_mesos})
     save_json(HISTORY_FILE, history)
 
