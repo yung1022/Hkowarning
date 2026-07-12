@@ -1,7 +1,8 @@
 import os
 import json
 import requests
-from datetime import datetime
+import re
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from PIL import Image, ImageDraw, ImageFont
 
@@ -10,6 +11,100 @@ HKO_WARNSUM_EN = 'https://data.weather.gov.hk/weatherAPI/opendata/weather.php?da
 HKO_WARNSUM_TC = 'https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=tc'
 HKO_WARNINFO_EN = 'https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warningInfo&lang=en'
 HKO_WARNINFO_TC = 'https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warningInfo&lang=tc'
+
+STATE_FILE = 'warning_state.json'
+HISTORY_FILE = 'history.json'
+IMAGE_FILE = 'current_warnings.png'
+
+# --- SEVERITY ENGINE (S1 - S5) ---
+def calculate_severity(size_str, intensity_str):
+    try:
+        size_matches = re.findall(r'\d+', str(size_str))
+        size_val = float(size_matches[-1]) if size_matches else 0
+        
+        int_matches = re.findall(r'\d+', str(intensity_str))
+        int_val = float(int_matches[-1]) if int_matches else 0
+        
+        s_score = 1
+        if int_val >= 100 or (int_val >= 70 and size_val >= 50): s_score = 5
+        elif int_val >= 70 or (int_val >= 50 and size_val >= 30): s_score = 4
+        elif int_val >= 50 or (int_val >= 30 and size_val >= 20): s_score = 3
+        elif int_val >= 30 or (int_val >= 10 and size_val >= 10): s_score = 2
+        
+        return f"S{s_score}"
+    except Exception:
+        return "S1"
+
+AREA_MAP = {
+    'Kowloon': '九龍', 'Outlying Islands': '離島',
+    'West NT': '新界西', 'East NT': '新界東', 'HK Island': '香港島'
+}
+
+UNOFFICIAL_ASSETS = {
+    'White Rainstorm Watch': 'white_rainstorm',
+    'Blue Rainstorm Warning': 'blue_rainstorm',
+    'Red Rainstorm Watch': 'red_watch',
+    'Black Rainstorm Watch': 'black_watch',
+    'Severe Thunderstorm Emergency': 'severe_thunderstorm'
+}
+
+def translate_areas(area_str):
+    if not area_str or str(area_str).strip().lower() == 'none': return 'None', 'None'
+    areas = [a.strip() for a in area_str.split(',')]
+    zh_areas = [AREA_MAP.get(a, a) for a in areas]
+    return "及".join(zh_areas), " and ".join(areas)
+
+def get_template_announcement(w_type, en_area):
+    area_text = en_area if en_area != 'None' else "most parts of Hong Kong"
+    if w_type == 'White Rainstorm Watch': return f"1. Expect heavy rain of about 10mm/h to form over the next 2-3 hours.\n2. About 10mm/h of heavy rain is currently impacting on {area_text}."
+    elif w_type == 'Blue Rainstorm Warning': return "1. Expect heavy rain of about 30mm/h to form over the next 2-3 hours.\n2. About 20mm/h of heavy rain is currently impacting on most parts of Hong Kong."
+    elif w_type == 'Red Rainstorm Watch': return "The chance of issuing Red Rainstorm Warning has reached more than 70%, it is very likely that a 50mm/h heavy rain will impact Hong Kong very soon."
+    elif w_type == 'Black Rainstorm Watch': return "The chance of issuing Black Rainstorm Warning has reached more than 70%, it is very likely that a 70mm/h heavy rain will impact Hong Kong very soon."
+    elif w_type == 'Severe Thunderstorm Emergency': return f"There's currently a huge thunderstorm on {en_area}."
+    return ""
+
+def parse_time(iso_str):
+    if not iso_str: return None
+    return datetime.fromisoformat(iso_str)
+
+def format_zh_time(dt):
+    if not dt: return ""
+    hour = dt.hour
+    minute = dt.minute
+    period = "上午" if hour < 12 else "下午"
+    h = 12 if hour == 0 else (hour if hour <= 12 else hour - 12)
+    return f"{period}{h}:{minute:02d}"
+
+def format_en_time(dt):
+    if not dt: return ""
+    return dt.strftime("%I:%M %p").lstrip('0').lower().replace("am", "a.m.").replace("pm", "p.m.")
+
+def parse_custom_target_time(time_str):
+    if not time_str or ":" not in time_str: return None
+    try:
+        now = datetimeHere are the complete, fully updated scripts for `bot.py` and `index.html`. 
+
+We have made three major architectural upgrades to achieve what you asked for:
+1. **S1-S5 Severity Calculator:** When you enter intensity and draw the polygon in the admin tools, `index.html` automatically calculates a severity rating (S1-S5) based on the diameter of your shape and the regex-parsed rain intensity. It embeds this as the 6th field in your payload.
+2. **2-Hour Forecast Line:** The frontend parses your movement string (e.g., "ENE at 25 km/h"). It extracts the compass direction and speed, uses Haversine math to find the geographical point 2 hours into the future, and draws a dashed forecast line on the map.
+3. **Zoom Earth Timeline Scrubber:** `history.json` now records an `updates` array for every change. `index.html` features a bottom slider covering the last 7 days. As you scrub back in time, the map dynamically repaints the polygons, forecast lines, and warning popups exactly as they were at that specific minute in history.
+
+### 1. `bot.py`
+Replace your existing file. This version supports parsing the 6th payload item (Severity) and transforms the Mesoscale history format to store a chronological `updates` array for the Zoom Earth style timeline scrubber.
+
+```python
+import os
+import json
+import requests
+from datetime import datetime
+from zoneinfo import ZoneInfo
+from PIL import Image, ImageDraw, ImageFont
+
+WEBHOOK_URL = os.environ.get('DISCORD_WEBHOOK_URL')
+HKO_WARNSUM_EN = '[https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=en](https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=en)'
+HKO_WARNSUM_TC = '[https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=tc](https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=tc)'
+HKO_WARNINFO_EN = '[https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warningInfo&lang=en](https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warningInfo&lang=en)'
+HKO_WARNINFO_TC = '[https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warningInfo&lang=tc](https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warningInfo&lang=tc)'
 
 STATE_FILE = 'warning_state.json'
 HISTORY_FILE = 'history.json'
@@ -231,7 +326,8 @@ def generate_status_image(official_en, official_tc, custom_warns, chances, curre
         y += 40
     else:
         for m_id, m_data in current_mesos.items():
-            draw.text((35, y), f"🌪️ Mesoscale Discussion: {m_id}", font=font_body, fill=(243, 156, 18))
+            sev_str = f" [{m_data.get('severity', 'S1')}]" if m_data.get('severity') else ""
+            draw.text((35, y), f"🌪️ Mesoscale Discussion: {m_id}{sev_str}", font=font_body, fill=(243, 156, 18))
             
             kinematics = []
             if m_data.get('center'): kinematics.append(f"Loc: {m_data['center']}")
@@ -295,9 +391,9 @@ def main():
     meso_id = os.environ.get('MESO_ID', '').strip()
     meso_text = os.environ.get('MESO_TEXT', '').strip()
     
-    # --- Unpack the embedded payload ---
+    # --- Unpack the embedded payload (now 6 parts) ---
     meso_payload = os.environ.get('MESO_PAYLOAD', '').strip()
-    meso_coords, meso_center, meso_size, meso_movement, meso_intensity = "", "", "", "", ""
+    meso_coords, meso_center, meso_size, meso_movement, meso_intensity, meso_severity = "", "", "", "", "", ""
     if meso_payload:
         parts = meso_payload.split('|')
         meso_coords = parts[0] if len(parts) > 0 else ""
@@ -305,6 +401,7 @@ def main():
         meso_size = parts[2] if len(parts) > 2 else ""
         meso_movement = parts[3] if len(parts) > 3 else ""
         meso_intensity = parts[4] if len(parts) > 4 else ""
+        meso_severity = parts[5] if len(parts) > 5 else "S1"
     
     now = datetime.now(ZoneInfo("Asia/Hong_Kong"))
     official_en = requests.get(HKO_WARNSUM_EN).json() or {}
@@ -325,7 +422,7 @@ def main():
     
     messages = []
     
-    # 1. Mesoscale Discussion Logic
+    # 1. Mesoscale Discussion Logic (With Timeline Updates)
     if meso_action == 'ISSUE' and meso_id:
         coords_list = []
         if meso_coords:
@@ -337,16 +434,21 @@ def main():
         current_mesos[meso_id] = {
             "id": meso_id, "issueTime": now.isoformat(),
             "coords": coords_list, "text": meso_text, "center": meso_center,
-            "movement": meso_movement, "size": meso_size, "intensity": meso_intensity
+            "movement": meso_movement, "size": meso_size, "intensity": meso_intensity, "severity": meso_severity
         }
         
+        # Save track node for Zoom Earth style timeline
         history['mesoscale_discussions'].append({
             "id": meso_id, "issue_time": now.isoformat(), "status": "active",
-            "coords": coords_list, "text": meso_text, "center": meso_center,
-            "movement": meso_movement, "size": meso_size, "intensity": meso_intensity
+            "updates": [{
+                "time": now.isoformat(), "coords": coords_list, "text": meso_text,
+                "center": meso_center, "movement": meso_movement, "size": meso_size, 
+                "intensity": meso_intensity, "severity": meso_severity
+            }]
         })
         
         msg = f"🌪️ **Mesoscale Discussion Issued: {meso_id}**\n"
+        if meso_severity: msg += f"🚨 **Severity Category:** {meso_severity}\n"
         if meso_center: msg += f"📍 **Center:** {meso_center}\n"
         if meso_movement: msg += f"💨 **Movement:** {meso_movement}\n"
         if meso_size: msg += f"📏 **Size:** {meso_size}\n"
@@ -366,27 +468,36 @@ def main():
                     if ',' in pair:
                         lat, lng = pair.split(',')
                         coords_list.append([float(lat), float(lng)])
-                if coords_list:
-                    m_data['coords'] = coords_list
-                    if hist_item: hist_item['coords'] = coords_list
+                if coords_list: m_data['coords'] = coords_list
+            else:
+                coords_list = m_data.get('coords', [])
             
             # Update kinematics if payload provided them
-            if meso_center: m_data['center'] = meso_center; hist_item['center'] = meso_center if hist_item else None
-            if meso_movement: m_data['movement'] = meso_movement; hist_item['movement'] = meso_movement if hist_item else None
-            if meso_size: m_data['size'] = meso_size; hist_item['size'] = meso_size if hist_item else None
-            if meso_intensity: m_data['intensity'] = meso_intensity; hist_item['intensity'] = meso_intensity if hist_item else None
+            if meso_center: m_data['center'] = meso_center
+            if meso_movement: m_data['movement'] = meso_movement
+            if meso_size: m_data['size'] = meso_size
+            if meso_intensity: m_data['intensity'] = meso_intensity
+            if meso_severity: m_data['severity'] = meso_severity
+            if meso_text: m_data['text'] = meso_text
             
-            if meso_text:
-                m_data['text'] = meso_text
-                if hist_item: hist_item['text'] = meso_text
+            if hist_item:
+                if 'updates' not in hist_item:
+                    hist_item['updates'] = []
+                hist_item['updates'].append({
+                    "time": now.isoformat(), "coords": coords_list,
+                    "center": m_data.get('center'), "movement": m_data.get('movement'),
+                    "size": m_data.get('size'), "intensity": m_data.get('intensity'),
+                    "severity": m_data.get('severity'), "text": m_data.get('text')
+                })
                 
             msg = f"🔄 **Mesoscale Discussion Updated: {meso_id}**\n"
+            if m_data.get('severity'): msg += f"🚨 **Severity Category:** {m_data['severity']}\n"
             if m_data.get('center'): msg += f"📍 **Center:** {m_data['center']}\n"
             if m_data.get('movement'): msg += f"💨 **Movement:** {m_data['movement']}\n"
             if m_data.get('size'): msg += f"📏 **Size:** {m_data['size']}\n"
             if m_data.get('intensity'): msg += f"🌧️ **Intensity:** {m_data['intensity']}\n"
             if m_data.get('text'): msg += f"\n{m_data['text']}\n"
-            msg += f"\n*(Area and stats updated on dashboard map)*"
+            msg += f"\n*(Area and forecast line updated on dashboard map)*"
             messages.append(msg)
 
     elif meso_action == 'CANCEL' and meso_id:
