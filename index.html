@@ -57,16 +57,24 @@
             background: #111; border: 1px solid #444; border-radius: 8px;
             padding: 15px; margin-bottom: 20px; display: none;
         }
-        #generator-map { height: 300px; width: 100%; margin-top: 10px; margin-bottom: 10px;}
+        #generator-map { height: 350px; width: 100%; margin-top: 10px; margin-bottom: 10px; border: 1px solid #555;}
         textarea {
             width: 100%; height: 60px; background: #222; color: #0f0;
             border: 1px solid #444; font-family: monospace; padding: 5px; margin-bottom: 15px;
         }
+        .input-group { display: flex; gap: 10px; margin-bottom: 10px; }
+        .input-group input { flex: 1; background: #222; color: #fff; border: 1px solid #444; padding: 8px; border-radius: 4px; }
+        
         button.admin-btn {
             background: #444; color: white; border: none; padding: 8px 12px;
             border-radius: 5px; cursor: pointer;
         }
         button.admin-btn:hover { background: #666; }
+        
+        /* Leaflet popup dark mode override */
+        .leaflet-popup-content-wrapper, .leaflet-popup-tip {
+            background: #2b2d31 !important; color: #dbdee1 !important;
+        }
     </style>
 </head>
 <body>
@@ -74,24 +82,21 @@
 <div class="container">
     <h1>📡 Weather Monitoring Dashboard</h1>
     
-    <button class="admin-btn" onclick="toggleAdmin()">⚙️ Toggle Admin Tools & Radar</button>
+    <button class="admin-btn" onclick="toggleAdmin()">⚙️ Toggle Admin Tools</button>
     <div class="admin-tools" id="adminTools">
+        <h3>📍 Mesoscale Draw & Auto-Calculator</h3>
+        <p style="font-size: 0.9em; color: var(--text-sub);">
+            Draw a polygon over the storm cell. Center and diameter are calculated automatically. Fill in the optional fields below and the final payload will be bundled for GitHub Actions.
+        </p>
         
-        <!-- Zoom Earth Embedded Satellite Map -->
-        <h3 style="margin-top: 0;">📡 Live Satellite & Radar Analysis</h3>
-        <p style="font-size: 0.9em; color: var(--text-sub);">Analyze cloud top cooling and convection over Hong Kong.</p>
-        <iframe 
-            src="https://zoom.earth/maps/satellite/#view=22.3,114.1,8z&overlays=radar,wind" 
-            width="100%" height="450px" 
-            style="border: 1px solid #444; border-radius: 6px; margin-bottom: 20px;" 
-            allowfullscreen>
-        </iframe>
-        
-        <!-- Drawing Map -->
-        <h3>📍 Mesoscale Coordinate Generator</h3>
-        <p style="font-size: 0.9em; color: var(--text-sub);">Draw a polygon on the map below to generate coordinates for GitHub Actions.</p>
         <div id="generator-map"></div>
-        <textarea id="coord-output" readonly placeholder="Draw a shape to generate coordinates..."></textarea>
+        
+        <div class="input-group">
+            <input type="text" id="meso-movement" placeholder="Movement (e.g., ENE at 25 km/h)" oninput="updatePayload()">
+            <input type="text" id="meso-intensity" placeholder="Intensity (e.g., 50-70 mm/h)" oninput="updatePayload()">
+        </div>
+
+        <textarea id="coord-output" readonly placeholder="Payload string will generate here once you draw on the map..."></textarea>
     </div>
     
     <h2>⚠️ Current Active Warnings</h2>
@@ -135,8 +140,53 @@
     }
 
     let viewMap;
+    let genMap;
     let viewLayers = [];
     let generatorMapInit = false;
+    let liveRadarUrl = null;
+    let currentDrawnLayer = null;
+
+    // Fetch Live Radar Layer from Rainviewer API
+    async function fetchLiveRadar() {
+        try {
+            const res = await fetch("https://api.rainviewer.com/public/weather-maps.json");
+            const data = await res.json();
+            const latest = data.radar.past[data.radar.past.length - 1];
+            liveRadarUrl = `https://tilecache.rainviewer.com${latest.path}/256/{z}/{x}/{y}/2/1_1.png`;
+            
+            if (viewMap) L.tileLayer(liveRadarUrl, { opacity: 0.65, zIndex: 10 }).addTo(viewMap);
+            if (genMap) L.tileLayer(liveRadarUrl, { opacity: 0.65, zIndex: 10 }).addTo(genMap);
+        } catch (e) {
+            console.error("Failed to load radar overlay", e);
+        }
+    }
+
+    // Embed and Compile Final String
+    function updatePayload() {
+        if (!currentDrawnLayer) return;
+        
+        // 1. Coordinates
+        const latlngs = currentDrawnLayer.getLatLngs()[0];
+        const coordStr = latlngs.map(ll => `${ll.lat.toFixed(4)},${ll.lng.toFixed(4)}`).join(';');
+        
+        // 2. Center
+        const bounds = currentDrawnLayer.getBounds();
+        const center = bounds.getCenter();
+        const centerStr = `${Math.abs(center.lat).toFixed(1)}°${center.lat >= 0 ? 'N' : 'S'} ${Math.abs(center.lng).toFixed(1)}°${center.lng >= 0 ? 'E' : 'W'}`;
+        
+        // 3. Diameter (Diagonal of bounding box in km)
+        const nw = bounds.getNorthWest();
+        const se = bounds.getSouthEast();
+        const diameterKm = (genMap.distance(nw, se) / 1000).toFixed(0) + ' km';
+        
+        // 4 & 5. Manual Inputs
+        const movement = document.getElementById('meso-movement').value || '';
+        const intensity = document.getElementById('meso-intensity').value || '';
+        
+        // Join everything with Pipes
+        const finalPayload = `${coordStr}|${centerStr}|${diameterKm}|${movement}|${intensity}`;
+        document.getElementById('coord-output').value = finalPayload;
+    }
 
     // Toggle Admin panel & setup Draw map
     function toggleAdmin() {
@@ -145,8 +195,10 @@
         
         if (panel.style.display === 'block' && !generatorMapInit) {
             generatorMapInit = true;
-            const genMap = L.map('generator-map').setView([22.3, 114.17], 10);
+            genMap = L.map('generator-map').setView([22.3, 114.17], 10);
             L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(genMap);
+            
+            if (liveRadarUrl) L.tileLayer(liveRadarUrl, { opacity: 0.65, zIndex: 10 }).addTo(genMap);
             
             const drawnItems = new L.FeatureGroup();
             genMap.addLayer(drawnItems);
@@ -158,13 +210,19 @@
             genMap.addControl(drawControl);
 
             genMap.on(L.Draw.Event.CREATED, function (e) {
-                drawnItems.clearLayers(); // Only allow one shape
-                const layer = e.layer;
-                drawnItems.addLayer(layer);
-                
-                const latlngs = layer.getLatLngs()[0];
-                const coordStr = latlngs.map(ll => `${ll.lat.toFixed(4)},${ll.lng.toFixed(4)}`).join(';');
-                document.getElementById('coord-output').value = coordStr;
+                drawnItems.clearLayers(); 
+                currentDrawnLayer = e.layer;
+                drawnItems.addLayer(currentDrawnLayer);
+                updatePayload(); // Auto-calculate and compile
+            });
+            
+            genMap.on(L.Draw.Event.EDITED, function () {
+                updatePayload();
+            });
+            
+            genMap.on(L.Draw.Event.DELETED, function () {
+                currentDrawnLayer = null;
+                document.getElementById('coord-output').value = "";
             });
         }
     }
@@ -174,18 +232,18 @@
             const res = await fetch('history.json?t=' + new Date().getTime());
             const data = await res.json();
             
-            // Collect all actives
             const officialActives = data.official_warnings.filter(w => w.status === 'active');
             const customActives = data.custom_warnings.filter(w => w.status === 'active');
             const mesoActives = data.mesoscale_discussions.filter(w => w.status === 'active');
             const allActives = [...officialActives, ...customActives, ...mesoActives];
             
-            // View Map Init
+            // Init Main View Map
             if (!viewMap) {
                 viewMap = L.map('map-container').setView([22.3, 114.17], 10);
                 L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
                     attribution: '&copy; CARTO'
                 }).addTo(viewMap);
+                fetchLiveRadar(); 
             }
 
             // Draw active Mesoscale polygons on public map
@@ -195,17 +253,27 @@
                 if (m.coords && m.coords.length > 0) {
                     const poly = L.polygon(m.coords, {color: '#f39c12', fillOpacity: 0.3}).addTo(viewMap);
                     
-                    let popupHtml = `<b>Mesoscale Discussion: ${m.id}</b><br>`;
-                    if(m.center) popupHtml += `<b>Center:</b> ${m.center}<br>`;
-                    if(m.movement) popupHtml += `<b>Movement:</b> ${m.movement}<br>`;
-                    if(m.size) popupHtml += `<b>Size:</b> ${m.size}<br>`;
-                    popupHtml += `<br>${m.text || ''}`;
+                    let popupHtml = `
+                        <div style="font-family:sans-serif; min-width: 180px;">
+                            <h4 style="margin:0 0 8px 0; border-bottom:1px solid #555; padding-bottom:5px; color:#f39c12;">
+                                🌪️ ID: ${m.id}
+                            </h4>
+                            <ul style="list-style:none; padding:0; margin:0; line-height:1.6; font-size:13px;">
+                    `;
+                    if(m.center) popupHtml += `<li>📍 <b>Center:</b> ${m.center}</li>`;
+                    if(m.movement) popupHtml += `<li>💨 <b>Movement:</b> ${m.movement}</li>`;
+                    if(m.size) popupHtml += `<li>📏 <b>Size:</b> ${m.size}</li>`;
+                    if(m.intensity) popupHtml += `<li>🌧️ <b>Intensity:</b> ${m.intensity}</li>`;
+                    popupHtml += `</ul>`;
+                    if(m.text) popupHtml += `<div style="margin-top:8px; padding-top:8px; border-top:1px solid #555; font-size:12px;">${m.text}</div>`;
+                    popupHtml += `</div>`;
                     
                     poly.bindPopup(popupHtml);
                     viewLayers.push(poly);
                 }
             });
 
+            // Active Warnings Text List
             const activeDiv = document.getElementById('active-warnings');
             if (allActives.length === 0) {
                 activeDiv.innerHTML = '<div class="card">No active warnings.</div>';
@@ -223,12 +291,12 @@
                         typeClass = 'meso'; typeName = 'Mesoscale'; 
                         nameDisplay = `<strong>Discussion ID: ${w.id}</strong><br><span class="time-text">${w.text || ''}</span>`;
                         
-                        // Show Kinematics if they exist
-                        if (w.center || w.movement || w.size) {
+                        if (w.center || w.movement || w.size || w.intensity) {
                             let kParts = [];
                             if (w.center) kParts.push(`📍 <b>Center:</b> ${w.center}`);
-                            if (w.movement) kParts.push(`💨 <b>Movement:</b> ${w.movement}`);
+                            if (w.movement) kParts.push(`💨 <b>Dir:</b> ${w.movement}`);
                             if (w.size) kParts.push(`📏 <b>Size:</b> ${w.size}`);
+                            if (w.intensity) kParts.push(`🌧️ <b>Rain:</b> ${w.intensity}`);
                             
                             kinematicsHtml = `<div class="meso-kinematics">${kParts.join(' &nbsp;|&nbsp; ')}</div>`;
                         }
@@ -263,7 +331,7 @@
                 `).join('');
             }
 
-            // Tables generator function
+            // Tables
             const makeRows = (list, isMeso = false) => {
                 if(list.length === 0) return '<tr><td colspan="4">No past records.</td></tr>';
                 return list.map(w => `
@@ -287,7 +355,7 @@
     }
 
     loadData();
-    setInterval(loadData, 60000);
+    setInterval(loadData, 60000); 
 </script>
 </body>
 </html>
