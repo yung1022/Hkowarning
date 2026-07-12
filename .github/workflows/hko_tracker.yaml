@@ -51,26 +51,15 @@ on:
         options:
           - NONE
           - ISSUE
+          - UPDATE
           - CANCEL
         default: 'NONE'
       meso_id:
         description: 'Mesoscale Discussion ID (e.g., MD-001)'
         type: string
         required: false
-      meso_center:
-        description: 'Mesocyclone Center (e.g., 22.2N 114.1E or 15km S of HKO)'
-        type: string
-        required: false
-      meso_movement:
-        description: 'Storm Movement (e.g., ENE at 25 km/h)'
-        type: string
-        required: false
-      meso_size:
-        description: 'Size / Diameter (e.g., 20 km)'
-        type: string
-        required: false
-      meso_coords:
-        description: 'Polygon Coordinates (e.g., 22.3,114.1;22.4,114.2)'
+      meso_payload:
+        description: 'Paste the generated payload from dashboard map'
         type: string
         required: false
       meso_text:
@@ -118,10 +107,7 @@ jobs:
         # Passing the new Mesoscale inputs here:
         MESO_ACTION: ${{ github.event.inputs.meso_action }}
         MESO_ID: ${{ github.event.inputs.meso_id }}
-        MESO_CENTER: ${{ github.event.inputs.meso_center }}
-        MESO_MOVEMENT: ${{ github.event.inputs.meso_movement }}
-        MESO_SIZE: ${{ github.event.inputs.meso_size }}
-        MESO_COORDS: ${{ github.event.inputs.meso_coords }}
+        MESO_PAYLOAD: ${{ github.event.inputs.meso_payload }}
         MESO_TEXT: ${{ github.event.inputs.meso_text }}
       run: python bot.py
 
