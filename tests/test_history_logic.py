@@ -7,7 +7,25 @@ pil_module = types.ModuleType('PIL')
 pil_image_module = types.ModuleType('PIL.Image')
 pil_draw_module = types.ModuleType('PIL.ImageDraw')
 pil_font_module = types.ModuleType('PIL.ImageFont')
+class _FakeImage:
+    def __init__(self, mode, size, color=(0, 0, 0, 0)):
+        self.mode = mode
+        self.size = size
+        self._pixels = [[list(color) for _ in range(size[0])] for _ in range(size[1])]
+
+    def putpixel(self, xy, value):
+        x, y = xy
+        self._pixels[y][x] = list(value)
+
+    def getpixel(self, xy):
+        x, y = xy
+        return tuple(self._pixels[y][x])
+
+    def save(self, *args, **kwargs):
+        return None
+
 pil_image_module.open = lambda *args, **kwargs: None
+pil_image_module.new = lambda mode, size, color=(0, 0, 0, 0): _FakeImage(mode, size, color)
 pil_draw_module.Draw = lambda *args, **kwargs: None
 pil_font_module.truetype = lambda *args, **kwargs: None
 pil_font_module.load_default = lambda: None
@@ -99,18 +117,32 @@ def test_rainviewer_assessment_triggers_for_heavy_cells():
     payload = {
         "current": {
             "rain": {
-                "1h": 35,
+                "1h": 15,
                 "area": "South China Sea"
             }
         },
         "past": [
-            {"precipitation": {"max": 35}},
-            {"precipitation": {"max": 25}}
+            {"precipitation": {"max": 15}},
+            {"precipitation": {"max": 10}}
         ]
     }
 
     result = bot.assess_rainviewer_activity(payload)
 
     assert result['should_issue'] is True
-    assert result['intensity'] >= 35
+    assert result['intensity'] >= 15
     assert 'South China Sea' in result['summary'] or 'South China Sea' in result['area']
+
+
+def test_pixel_analysis_marks_rainy_cells():
+    img = bot.Image.new('RGBA', (2, 2), (0, 0, 0, 0))
+    img.putpixel((0, 0), (255, 255, 255, 255))
+    img.putpixel((1, 0), (120, 120, 120, 255))
+    img.putpixel((0, 1), (80, 80, 80, 255))
+    img.putpixel((1, 1), (255, 0, 0, 255))
+
+    result = bot.analyze_rainviewer_pixels(img)
+
+    assert result['rainy_pixels'] >= 3
+    assert result['max_brightness'] >= 255
+    assert result['rainy_points']

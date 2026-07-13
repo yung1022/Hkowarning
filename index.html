@@ -81,6 +81,13 @@
         </div>
         <div id="calc-preview" style="margin-bottom:10px; color:#f39c12; font-weight:bold;"></div>
         <textarea id="coord-output" readonly placeholder="Payload string will generate here..."></textarea>
+        <div style="margin-top:12px; padding:12px; border:1px solid #444; border-radius:6px; background:#1a1a1a;">
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px;">
+                <button class="admin-btn" onclick="runRadarFetchTest()">🧪 Test Radar Fetch</button>
+                <span id="radar-test-status" style="color:#f39c12; font-size:0.95em;">No radar test run yet.</span>
+            </div>
+            <canvas id="radar-test-canvas" width="256" height="256" style="width:100%; max-width:320px; border:1px solid #444; background:#000;"></canvas>
+        </div>
     </div>
     
     <h2>⚠️ Map Overview & Warning History</h2>
@@ -217,6 +224,63 @@
                 L.tileLayer(`https://tilecache.rainviewer.com${latest.path}/256/{z}/{x}/{y}/2/1_1.png`, { opacity, zIndex }).addTo(map);
             })
             .catch(err => console.warn("RainViewer overlay unavailable:", err));
+    }
+
+    function runRadarFetchTest() {
+        const status = document.getElementById('radar-test-status');
+        const canvas = document.getElementById('radar-test-canvas');
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        status.textContent = 'Fetching latest radar image...';
+
+        fetch('https://api.rainviewer.com/public/weather-maps.json')
+            .then(r => r.json())
+            .then(data => {
+                const latest = data.radar && data.radar.past ? data.radar.past[data.radar.past.length - 1] : null;
+                if (!latest || !latest.path) {
+                    status.textContent = 'No radar tile available yet.';
+                    return;
+                }
+
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.onload = () => {
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const pixels = imageData.data;
+                    let rainyPixels = 0;
+                    let maxBrightness = 0;
+
+                    for (let y = 0; y < canvas.height; y++) {
+                        for (let x = 0; x < canvas.width; x++) {
+                            const i = (y * canvas.width + x) * 4;
+                            const r = pixels[i];
+                            const g = pixels[i + 1];
+                            const b = pixels[i + 2];
+                            const a = pixels[i + 3];
+                            if (a < 40) continue;
+                            const brightness = Math.max(r, g, b);
+                            maxBrightness = Math.max(maxBrightness, brightness);
+                            const colorSpan = Math.abs(r - g) + Math.abs(g - b) + Math.abs(b - r);
+                            if (brightness >= 80 && (colorSpan >= 20 || brightness >= 140)) {
+                                rainyPixels += 1;
+                                ctx.fillStyle = 'rgba(255, 70, 70, 0.8)';
+                                ctx.fillRect(x, y, 2, 2);
+                            }
+                        }
+                    }
+
+                    status.textContent = `Radar test complete: ${rainyPixels} highlighted rain pixels detected (max brightness ${maxBrightness}).`;
+                };
+                img.onerror = () => {
+                    status.textContent = 'Radar test failed to load the tile image.';
+                };
+                img.src = `https://tilecache.rainviewer.com${latest.path}/256/0/0/0/2/1_1.png`;
+            })
+            .catch(err => {
+                console.warn('Radar fetch test unavailable:', err);
+                status.textContent = 'Radar test failed.';
+            });
     }
 
     // Rendering Logic for specific Timestamp

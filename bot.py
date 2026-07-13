@@ -19,6 +19,9 @@ HISTORY_FILE = 'history.json'
 IMAGE_FILE = 'current_warnings.png'
 RAINVIEWER_API_URL = 'https://api.rainviewer.com/public/weather-maps.json'
 RAINVIEWER_TILE_HOST = 'https://tilecache.rainviewer.com'
+RAINVIEWER_TRIGGER_INTENSITY = 15
+RAINVIEWER_PIXEL_BRIGHTNESS_THRESHOLD = 80
+RAINVIEWER_PIXEL_COLOR_SPAN_THRESHOLD = 20
 
 # --- SEVERITY ENGINE (S1 - S5) ---
 def calculate_severity(size_str, intensity_str):
@@ -165,14 +168,53 @@ def assess_rainviewer_activity(payload):
     if past_values:
         intensity = max(intensity, max(past_values))
 
-    should_issue = intensity >= 35
-    summary = f"RainViewer indicates strong convective rain near {area or 'the monitored area'} with estimated intensity {intensity} mm/h." if should_issue else "RainViewer intensity is below the mesoscale trigger threshold."
+    should_issue = intensity >= RAINVIEWER_TRIGGER_INTENSITY
+    summary = f"RainViewer indicates convective rain near {area or 'the monitored area'} with estimated intensity {intensity} mm/h." if should_issue else "RainViewer intensity is below the mesoscale trigger threshold."
     return {
         "should_issue": should_issue,
         "reason": "heavy_rain_cell" if should_issue else "below_threshold",
         "intensity": int(intensity),
         "area": area,
         "summary": summary,
+    }
+
+
+def analyze_rainviewer_pixels(img):
+    if img is None:
+        return {"rainy_pixels": 0, "rainy_points": [], "max_brightness": 0}
+
+    width, height = img.size
+    rainy_points = []
+    max_brightness = 0
+
+    for y in range(height):
+        for x in range(width):
+            pixel = img.getpixel((x, y))
+            if len(pixel) >= 4:
+                r, g, b, a = pixel[:4]
+            else:
+                r = g = b = a = 0
+            if a < 40:
+                continue
+
+            brightness = max(r, g, b)
+            max_brightness = max(max_brightness, brightness)
+            color_span = abs(r - g) + abs(g - b) + abs(b - r)
+            if brightness >= RAINVIEWER_PIXEL_BRIGHTNESS_THRESHOLD:
+                rainy_points.append({
+                    "x": x,
+                    "y": y,
+                    "brightness": brightness,
+                    "color_span": color_span,
+                    "r": r,
+                    "g": g,
+                    "b": b,
+                })
+
+    return {
+        "rainy_pixels": len(rainy_points),
+        "rainy_points": rainy_points,
+        "max_brightness": max_brightness,
     }
 
 
@@ -245,14 +287,8 @@ def fetch_rainviewer_payload():
         return {}
 
     width, height = img.size
-    coords = []
-    for y in range(height):
-        for x in range(width):
-            r, g, b, a = img.getpixel((x, y))
-            if a < 40:
-                continue
-            if max(r, g, b) > 80 and (abs(r - g) + abs(g - b) + abs(b - r)) > 30:
-                coords.append((x, y))
+    analysis = analyze_rainviewer_pixels(img)
+    coords = [(point["x"], point["y"]) for point in analysis.get("rainy_points", [])]
 
     if not coords:
         coords = [(x, y) for y in range(height) for x in range(width) if img.getpixel((x, y))[3] > 0]
@@ -274,9 +310,9 @@ def fetch_rainviewer_payload():
     lat_center = 22.3 + (0.5 - y_center) * 0.35
     lon_center = 114.2 + (x_center - 0.5) * 0.45
 
-    intensity = min(100, max(35, int(len(coords) / 120)))
+    intensity = min(100, max(RAINVIEWER_TRIGGER_INTENSITY, int(len(coords) / 120)))
     if len(coords) <= 300:
-        intensity = max(intensity, 45)
+        intensity = max(intensity, 20)
     lat_span = 0.04 + min(0.22, (max_y - min_y) / height * 0.35)
     lon_span = 0.05 + min(0.24, (max_x - min_x) / width * 0.35)
 
@@ -311,6 +347,7 @@ def fetch_rainviewer_payload():
             {'precipitation': {'max': intensity}}
         ],
         'geometry': {'polygon': polygon, 'center': [lat_center, lon_center]},
+        'diagnostics': analysis,
     }
 
 
