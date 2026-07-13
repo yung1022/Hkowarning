@@ -84,12 +84,21 @@ def format_en_time(dt):
     return dt.strftime("%I:%M %p").lstrip('0').lower().replace("am", "a.m.").replace("pm", "p.m.")
 
 def parse_custom_target_time(time_str):
-    if not time_str or ":" not in time_str: return None
+    if not time_str: return None
     try:
         now = datetime.now(ZoneInfo("Asia/Hong_Kong"))
-        parts = time_str.strip().split(":")
-        return now.replace(hour=int(parts[0]), minute=int(parts[1]), second=0, microsecond=0)
-    except Exception: 
+        text = time_str.strip()
+        time_matches = re.findall(r'(\d{1,2}):(\d{2})', text)
+        if not time_matches:
+            return None
+
+        use_tomorrow = 'tomorrow' in text.lower()
+        hour, minute = map(int, time_matches[-1])
+        target_dt = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        if use_tomorrow:
+            target_dt = target_dt + timedelta(days=1)
+        return target_dt
+    except Exception:
         return None
 
 def get_warning_identifiers(w_type, area="None"):

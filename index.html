@@ -197,6 +197,7 @@
             generatorMapInit = true;
             genMap = L.map('generator-map').setView([22.3, 114.17], 10);
             L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(genMap);
+            addRainViewerOverlay(genMap);
             const drawnItems = new L.FeatureGroup();
             genMap.addLayer(drawnItems);
             new L.Control.Draw({ edit: { featureGroup: drawnItems }, draw: { marker: false, circlemarker: false, circle: false, polyline: false, polygon: { allowIntersection: false } } }).addTo(genMap);
@@ -205,6 +206,17 @@
             genMap.on(L.Draw.Event.EDITED, updatePayload);
             genMap.on(L.Draw.Event.DELETED, function () { currentDrawnLayer = null; document.getElementById('coord-output').value = ""; });
         }
+    }
+
+    function addRainViewerOverlay(map, opacity = 0.65, zIndex = 10) {
+        fetch("https://api.rainviewer.com/public/weather-maps.json")
+            .then(r => r.json())
+            .then(data => {
+                const latest = data.radar && data.radar.past ? data.radar.past[data.radar.past.length - 1] : null;
+                if (!latest || !latest.path) return;
+                L.tileLayer(`https://tilecache.rainviewer.com${latest.path}/256/{z}/{x}/{y}/2/1_1.png`, { opacity, zIndex }).addTo(map);
+            })
+            .catch(err => console.warn("RainViewer overlay unavailable:", err));
     }
 
     // Rendering Logic for specific Timestamp
@@ -329,10 +341,7 @@
                 L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(viewMap);
                 
                 // Fetch radar once for live overlay
-                fetch("https://api.rainviewer.com/public/weather-maps.json").then(r => r.json()).then(data => {
-                    const latest = data.radar.past[data.radar.past.length - 1];
-                    L.tileLayer(`https://tilecache.rainviewer.com${latest.path}/256/{z}/{x}/{y}/2/1_1.png`, { opacity: 0.65, zIndex: 10 }).addTo(viewMap);
-                });
+                addRainViewerOverlay(viewMap);
             }
             
             // Only auto-update if slider is at LIVE
