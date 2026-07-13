@@ -22,6 +22,12 @@ RAINVIEWER_TILE_HOST = 'https://tilecache.rainviewer.com'
 RAINVIEWER_TRIGGER_INTENSITY = 15
 RAINVIEWER_PIXEL_BRIGHTNESS_THRESHOLD = 80
 RAINVIEWER_PIXEL_COLOR_SPAN_THRESHOLD = 20
+HONG_KONG_BOUNDS = {
+    'lat_min': 22.135,
+    'lat_max': 22.55,
+    'lon_min': 113.80,
+    'lon_max': 114.60,
+}
 
 # --- SEVERITY ENGINE (S1 - S5) ---
 def calculate_severity(size_str, intensity_str):
@@ -218,6 +224,17 @@ def analyze_rainviewer_pixels(img):
     }
 
 
+def project_to_hong_kong(x, y, width, height):
+    if width <= 0 or height <= 0:
+        return (HONG_KONG_BOUNDS['lat_max'], HONG_KONG_BOUNDS['lon_min'])
+
+    x_norm = max(0.0, min(1.0, x / float(width)))
+    y_norm = max(0.0, min(1.0, y / float(height)))
+    lat = HONG_KONG_BOUNDS['lat_max'] - y_norm * (HONG_KONG_BOUNDS['lat_max'] - HONG_KONG_BOUNDS['lat_min'])
+    lon = HONG_KONG_BOUNDS['lon_min'] + x_norm * (HONG_KONG_BOUNDS['lon_max'] - HONG_KONG_BOUNDS['lon_min'])
+    return round(lat, 4), round(lon, 4)
+
+
 def build_convex_hull(points):
     if not points:
         return []
@@ -305,29 +322,24 @@ def fetch_rainviewer_payload():
     min_y = min(y for _, y in coords)
     max_y = max(y for _, y in coords)
 
-    x_center = (min_x + max_x) / (2 * width)
-    y_center = (min_y + max_y) / (2 * height)
-    lat_center = 22.3 + (0.5 - y_center) * 0.35
-    lon_center = 114.2 + (x_center - 0.5) * 0.45
+    x_center = (min_x + max_x) / 2
+    y_center = (min_y + max_y) / 2
+    lat_center, lon_center = project_to_hong_kong(x_center, y_center, width, height)
 
     intensity = min(100, max(RAINVIEWER_TRIGGER_INTENSITY, int(len(coords) / 120)))
     if len(coords) <= 300:
         intensity = max(intensity, 20)
-    lat_span = 0.04 + min(0.22, (max_y - min_y) / height * 0.35)
-    lon_span = 0.05 + min(0.24, (max_x - min_x) / width * 0.35)
 
     polygon = []
     for x, y in hull:
-        lat = lat_center + ((height / 2 - y) / height) * lat_span
-        lon = lon_center + ((x - width / 2) / width) * lon_span
-        polygon.append([round(lat, 4), round(lon, 4)])
+        lat, lon = project_to_hong_kong(x, y, width, height)
+        polygon.append([lat, lon])
 
     if len(polygon) < 3:
         polygon = [
-            [lat_center - lat_span / 2, lon_center - lon_span / 2],
-            [lat_center - lat_span / 2, lon_center + lon_span / 2],
-            [lat_center + lat_span / 2, lon_center + lon_span / 2],
-            [lat_center + lat_span / 2, lon_center - lon_span / 2],
+            [lat_center, lon_center],
+            [lat_center + 0.005, lon_center + 0.005],
+            [lat_center + 0.005, lon_center - 0.005],
         ]
 
     area_name = os.environ.get('MESO_AREA_NAME', 'detected convective cell').strip() or 'detected convective cell'
@@ -348,6 +360,7 @@ def fetch_rainviewer_payload():
         ],
         'geometry': {'polygon': polygon, 'center': [lat_center, lon_center]},
         'diagnostics': analysis,
+        'image_bytes': image_bytes,
     }
 
 
@@ -448,7 +461,7 @@ def paste_icon(img, folder, filename, x, y):
             pass
     return False
 
-def generate_status_image(official_en, official_tc, custom_warns, chances, current_mesos):
+def generate_status_image(official_en, official_tc, custom_warns, chances, current_mesos, rainviewer_data=None):
     rs_level = 0
     if "WRAIN" in official_en:
         code = official_en["WRAIN"].get("code", "")
@@ -459,7 +472,7 @@ def generate_status_image(official_en, official_tc, custom_warns, chances, curre
     show_red = (chances.get('red') or rs_level >= 1) and rs_level < 2
     show_blk = (chances.get('black') or rs_level >= 1) and rs_level < 3
 
-    width = 800
+    width = 1100
     off_count = len(official_en)
     cust_count = len(custom_warns)
     meso_count = len(current_mesos)
@@ -469,7 +482,8 @@ def generate_status_image(official_en, official_tc, custom_warns, chances, curre
     if show_blk: chances_h += 30
     if chances_h > 0: chances_h += 20
     
-    height = 60 + 50 + (off_count * 90 if off_count else 50) + 50 + (cust_count * 90 if cust_count else 50) + 50 + (meso_count * 110 if meso_count else 50) + chances_h + 30
+    rain_preview_h = 320 if rainviewer_data else 0
+    height = 60 + 50 + (off_count * 90 if off_count else 50) + 50 + (cust_count * 90 if cust_count else 50) + 50 + (meso_count * 110 if meso_count else 50) + chances_h + rain_preview_h + 30
     
     img = Image.new('RGB', (width, height), color=(43, 45, 49))
     draw = ImageDraw.Draw(img)
@@ -486,6 +500,43 @@ def generate_status_image(official_en, official_tc, custom_warns, chances, curre
     draw.rectangle([0, 0, width, 60], fill=(30, 31, 34))
     now_str = datetime.now(ZoneInfo("Asia/Hong_Kong")).strftime("%Y-%m-%d %H:%M:%S HKT")
     draw.text((20, 15), f"HKO Weather Monitoring Board ({now_str})", font=font_title, fill=(255, 255, 255))
+
+    if rainviewer_data:
+        preview_w, preview_h = 360, 240
+        image_bytes = rainviewer_data.get('image_bytes')
+        preview_img = None
+        if image_bytes:
+            try:
+                preview_img = Image.open(BytesIO(image_bytes)).convert('RGBA').resize((preview_w, preview_h), Image.LANCZOS)
+            except Exception:
+                preview_img = None
+        if preview_img is None:
+            preview_img = Image.new('RGBA', (preview_w, preview_h), (24, 24, 24, 255))
+
+        overlay = Image.new('RGBA', preview_img.size, (0, 0, 0, 0))
+        overlay_draw = ImageDraw.Draw(overlay)
+        diagnostics = rainviewer_data.get('diagnostics') or {}
+        rainy_points = diagnostics.get('rainy_points') or []
+        if rainy_points:
+            source_w, source_h = preview_img.size
+            scaled_points = []
+            for point in rainy_points:
+                x = int(point.get('x', 0) / max(1, source_w) * preview_w)
+                y = int(point.get('y', 0) / max(1, source_h) * preview_h)
+                scaled_points.append((x, y))
+            if len(scaled_points) >= 3:
+                hull = build_convex_hull(scaled_points)
+                if len(hull) >= 3:
+                    overlay_draw.polygon([(int(x), int(y)) for x, y in hull], fill=(255, 0, 0, 35), outline=(255, 0, 0, 220))
+            elif scaled_points:
+                overlay_draw.ellipse((0, 0, preview_w, preview_h), fill=(255, 0, 0, 25), outline=(255, 0, 0, 220))
+
+        preview_img = Image.alpha_composite(preview_img, overlay)
+        img.paste(preview_img, (700, 70))
+        draw.rectangle([700, 70, 700 + preview_w, 70 + preview_h], outline=(255, 255, 255, 80), width=2)
+        current_rain = (rainviewer_data.get('current') or {}).get('rain') or {}
+        intensity = current_rain.get('1h') or current_rain.get('max') or 0
+        draw.text((700, 325), f"RainViewer • {intensity} mm/h threshold area", font=font_detail, fill=(255, 200, 100))
 
     # Official Warnings
     y = 80
@@ -574,9 +625,9 @@ def generate_status_image(official_en, official_tc, custom_warns, chances, curre
 
     img.save(IMAGE_FILE)
 
-def post_to_discord(messages, official_en, official_tc, custom_warns, chances, current_mesos):
+def post_to_discord(messages, official_en, official_tc, custom_warns, chances, current_mesos, rainviewer_data=None):
     if not messages: return
-    generate_status_image(official_en, official_tc, custom_warns, chances, current_mesos)
+    generate_status_image(official_en, official_tc, custom_warns, chances, current_mesos, rainviewer_data)
     
     full_text = "\n\n".join(messages)
     chunks = [full_text[i:i+1900] for i in range(0, len(full_text), 1900)]
@@ -973,7 +1024,7 @@ def main():
         v_copy['tc_name'] = official_tc.get(k, {}).get('name', v.get('name'))
         next_official_state[k] = v_copy
 
-    if messages: post_to_discord(messages, official_en, official_tc, current_customs, chances, current_mesos)
+    if messages: post_to_discord(messages, official_en, official_tc, current_customs, chances, current_mesos, rainviewer_data)
     save_json(STATE_FILE, {"official": next_official_state, "custom": current_customs, "chances": chances, "mesoscale": current_mesos})
     save_json(HISTORY_FILE, history)
 

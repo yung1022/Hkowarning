@@ -146,3 +146,15 @@ def test_pixel_analysis_marks_rainy_cells():
     assert result['rainy_pixels'] >= 3
     assert result['max_brightness'] >= 255
     assert result['rainy_points']
+
+
+def test_hong_kong_projection_stays_within_hk_bbox():
+    top_left = bot.project_to_hong_kong(0, 0, 100, 100)
+    bottom_right = bot.project_to_hong_kong(100, 100, 100, 100)
+
+    assert top_left[0] >= bot.HONG_KONG_BOUNDS['lat_min']
+    assert top_left[0] <= bot.HONG_KONG_BOUNDS['lat_max']
+    assert top_left[1] >= bot.HONG_KONG_BOUNDS['lon_min']
+    assert top_left[1] <= bot.HONG_KONG_BOUNDS['lon_max']
+    assert bottom_right[0] <= top_left[0]
+    assert bottom_right[1] >= top_left[1]
