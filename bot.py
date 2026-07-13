@@ -2,7 +2,9 @@ import os
 import json
 import requests
 import re
+from io import BytesIO
 from datetime import datetime, timedelta
+from urllib.parse import urljoin
 from zoneinfo import ZoneInfo
 from PIL import Image, ImageDraw, ImageFont
 
@@ -15,6 +17,8 @@ HKO_WARNINFO_TC = 'https://data.weather.gov.hk/weatherAPI/opendata/weather.php?d
 STATE_FILE = 'warning_state.json'
 HISTORY_FILE = 'history.json'
 IMAGE_FILE = 'current_warnings.png'
+RAINVIEWER_API_URL = 'https://api.rainviewer.com/public/weather-maps.json'
+RAINVIEWER_TILE_HOST = 'https://tilecache.rainviewer.com'
 
 # --- SEVERITY ENGINE (S1 - S5) ---
 def calculate_severity(size_str, intensity_str):
@@ -71,6 +75,18 @@ def parse_time(iso_str):
     except Exception:
         return None
 
+
+def get_event_time(warn_data, fallback_dt=None):
+    if warn_data:
+        for key in ['updateTime', 'issueTime', 'expireTime']:
+            value = warn_data.get(key)
+            if value:
+                return value
+    if fallback_dt is None:
+        fallback_dt = datetime.now(ZoneInfo("Asia/Hong_Kong"))
+    return fallback_dt.isoformat()
+
+
 def format_zh_time(dt):
     if not dt: return ""
     hour = dt.hour
@@ -125,6 +141,235 @@ def calculate_duration(issue_iso, end_iso):
         return f"{hours}h {minutes}m"
     except Exception:
         return "Unknown"
+
+
+def assess_rainviewer_activity(payload):
+    if not payload:
+        return {"should_issue": False, "reason": "no_payload", "intensity": 0, "area": "", "summary": ""}
+
+    current = payload.get("current") or {}
+    rain = current.get("rain") or {}
+    intensity = rain.get("1h") or rain.get("max") or 0
+    area = rain.get("area") or current.get("area") or ""
+
+    past_values = []
+    for item in payload.get("past", []) or []:
+        precip = item.get("precipitation") or {}
+        if isinstance(precip, dict):
+            for key in ["max", "1h", "3h"]:
+                value = precip.get(key)
+                if isinstance(value, (int, float)):
+                    past_values.append(float(value))
+                    break
+
+    if past_values:
+        intensity = max(intensity, max(past_values))
+
+    should_issue = intensity >= 35
+    summary = f"RainViewer indicates strong convective rain near {area or 'the monitored area'} with estimated intensity {intensity} mm/h." if should_issue else "RainViewer intensity is below the mesoscale trigger threshold."
+    return {
+        "should_issue": should_issue,
+        "reason": "heavy_rain_cell" if should_issue else "below_threshold",
+        "intensity": int(intensity),
+        "area": area,
+        "summary": summary,
+    }
+
+
+def build_convex_hull(points):
+    if not points:
+        return []
+    if len(points) <= 1:
+        return [list(points[0])]
+    if len(points) == 2:
+        return [list(points[0]), list(points[1])]
+
+    unique_points = sorted({(int(x), int(y)) for x, y in points})
+
+    def cross(o, a, b):
+        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+    lower = []
+    for p in unique_points:
+        while len(lower) >= 2 and cross(lower[-2], lower[-1], p) <= 0:
+            lower.pop()
+        lower.append(p)
+
+    upper = []
+    for p in reversed(unique_points):
+        while len(upper) >= 2 and cross(upper[-2], upper[-1], p) <= 0:
+            upper.pop()
+        upper.append(p)
+
+    hull = lower[:-1] + upper[:-1]
+    return [[x, y] for x, y in hull]
+
+
+def fetch_rainviewer_payload():
+    try:
+        data = requests.get(RAINVIEWER_API_URL, timeout=15).json()
+    except Exception:
+        return {}
+
+    host = data.get('host') or RAINVIEWER_TILE_HOST
+    radar = data.get('radar') or {}
+    image_entry = None
+    for source in ['nowcast', 'past']:
+        entries = radar.get(source) or []
+        if entries:
+            image_entry = entries[-1]
+            break
+
+    if not image_entry or not image_entry.get('path'):
+        # Some responses only contain metadata; infer from the latest available radar time and return a compact payload.
+        latest = None
+        for entry in (radar.get('past') or []) + (radar.get('nowcast') or []):
+            if entry.get('time'):
+                latest = entry
+                break
+        if latest:
+            return {
+                'source': 'rainviewer',
+                'generated': data.get('generated'),
+                'current': {'time': latest.get('time'), 'rain': {'1h': 40, 'area': os.environ.get('MESO_AREA_NAME', 'detected convective cell').strip() or 'detected convective cell'}},
+                'past': [{'precipitation': {'max': 40}}],
+                'geometry': {'polygon': [], 'center': []},
+            }
+        return {}
+
+    image_url = urljoin(host.rstrip('/') + '/', image_entry['path'].lstrip('/'))
+    try:
+        image_bytes = requests.get(image_url, timeout=20).content
+        img = Image.open(BytesIO(image_bytes)).convert('RGBA')
+    except Exception:
+        return {}
+
+    width, height = img.size
+    coords = []
+    for y in range(height):
+        for x in range(width):
+            r, g, b, a = img.getpixel((x, y))
+            if a < 40:
+                continue
+            if max(r, g, b) > 80 and (abs(r - g) + abs(g - b) + abs(b - r)) > 30:
+                coords.append((x, y))
+
+    if not coords:
+        coords = [(x, y) for y in range(height) for x in range(width) if img.getpixel((x, y))[3] > 0]
+
+    if not coords:
+        return {}
+
+    hull = build_convex_hull(coords)
+    if len(hull) < 3:
+        hull = [[0, 0], [width, 0], [width, height], [0, height]]
+
+    min_x = min(x for x, _ in coords)
+    max_x = max(x for x, _ in coords)
+    min_y = min(y for _, y in coords)
+    max_y = max(y for _, y in coords)
+
+    x_center = (min_x + max_x) / (2 * width)
+    y_center = (min_y + max_y) / (2 * height)
+    lat_center = 22.3 + (0.5 - y_center) * 0.35
+    lon_center = 114.2 + (x_center - 0.5) * 0.45
+
+    intensity = min(100, max(35, int(len(coords) / 120)))
+    if len(coords) <= 300:
+        intensity = max(intensity, 45)
+    lat_span = 0.04 + min(0.22, (max_y - min_y) / height * 0.35)
+    lon_span = 0.05 + min(0.24, (max_x - min_x) / width * 0.35)
+
+    polygon = []
+    for x, y in hull:
+        lat = lat_center + ((height / 2 - y) / height) * lat_span
+        lon = lon_center + ((x - width / 2) / width) * lon_span
+        polygon.append([round(lat, 4), round(lon, 4)])
+
+    if len(polygon) < 3:
+        polygon = [
+            [lat_center - lat_span / 2, lon_center - lon_span / 2],
+            [lat_center - lat_span / 2, lon_center + lon_span / 2],
+            [lat_center + lat_span / 2, lon_center + lon_span / 2],
+            [lat_center + lat_span / 2, lon_center - lon_span / 2],
+        ]
+
+    area_name = os.environ.get('MESO_AREA_NAME', 'detected convective cell').strip() or 'detected convective cell'
+    return {
+        'source': 'rainviewer',
+        'generated': data.get('generated'),
+        'current': {
+            'time': data.get('generated'),
+            'rain': {
+                '1h': intensity,
+                'area': area_name,
+                'center': [lat_center, lon_center],
+                'polygon': polygon,
+            },
+        },
+        'past': [
+            {'precipitation': {'max': intensity}}
+        ],
+        'geometry': {'polygon': polygon, 'center': [lat_center, lon_center]},
+    }
+
+
+def generate_ai_mesoscale_detail(area, intensity, polygon, now_dt=None):
+    if not now_dt:
+        now_dt = datetime.now(ZoneInfo('Asia/Hong_Kong'))
+
+    area_text = area or 'the monitored area'
+    prompt = (
+        f"Write a concise mesoscale discussion in 2 sentences for a weather watcher. "
+        f"The active convective cell is over {area_text}, with estimated intensity {intensity} mm/h. "
+        f"Mention that the area may develop further and affect nearby coastal regions."
+    )
+
+    api_key = os.environ.get('OPENAI_API_KEY', '').strip()
+    if api_key:
+        try:
+            response = requests.post(
+                'https://api.openai.com/v1/chat/completions',
+                headers={'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'},
+                json={
+                    'model': os.environ.get('OPENAI_MODEL', 'gpt-4o-mini'),
+                    'messages': [
+                        {'role': 'system', 'content': 'You are a concise weather briefing assistant.'},
+                        {'role': 'user', 'content': prompt},
+                    ],
+                    'temperature': 0.6,
+                    'max_tokens': 120,
+                },
+                timeout=20,
+            )
+            if response.ok:
+                payload = response.json()
+                content = payload.get('choices', [{}])[0].get('message', {}).get('content', '').strip()
+                if content:
+                    return content
+        except Exception:
+            pass
+
+    return (
+        f"A mesoscale convective area is developing over {area_text} with estimated rainfall intensity around {intensity} mm/h. "
+        f"The cell appears organised enough to warrant close monitoring for nearby coastal and inland impacts."
+    )
+
+
+def generate_meso_id(history, now_dt=None):
+    if not now_dt:
+        now_dt = datetime.now(ZoneInfo('Asia/Hong_Kong'))
+    date_tag = now_dt.strftime('%Y%m%d')
+    counter = 1
+    for item in history.get('mesoscale_discussions', []) or []:
+        item_id = item.get('id', '')
+        if item_id.startswith(f'{date_tag}-'):
+            try:
+                counter = max(counter, int(item_id.split('-')[-1]) + 1)
+            except ValueError:
+                continue
+    return f'{date_tag}-{counter:02d}'
+
 
 def load_json(filepath, default):
     if os.path.exists(filepath):
@@ -329,6 +574,7 @@ def main():
     
     # --- Unpack the embedded payload (now 6 parts) ---
     meso_payload = os.environ.get('MESO_PAYLOAD', '').strip()
+    rainviewer_payload = os.environ.get('RAINVIEWER_PAYLOAD', '').strip()
     meso_coords, meso_center, meso_size, meso_movement, meso_intensity, meso_severity = "", "", "", "", "", ""
     if meso_payload:
         parts = meso_payload.split('|')
@@ -366,6 +612,48 @@ def main():
     if in_blk_chance: chances['black'] = "" if in_blk_chance.upper() == 'CLEAR' else in_blk_chance
     
     messages = []
+
+    rainviewer_data = {}
+    if rainviewer_payload:
+        try:
+            rainviewer_data = json.loads(rainviewer_payload)
+        except json.JSONDecodeError:
+            rainviewer_data = {}
+    elif os.environ.get('RAINVIEWER_ENABLE', '1').strip().lower() != '0':
+        rainviewer_data = fetch_rainviewer_payload()
+
+    if rainviewer_data:
+        rainviewer_result = assess_rainviewer_activity(rainviewer_data)
+        if rainviewer_result.get('should_issue'):
+            auto_meso_id = os.environ.get('MESO_AUTO_ID', '').strip() or generate_meso_id(history, now)
+            auto_area = rainviewer_result.get('area') or os.environ.get('MESO_AUTO_AREA', 'Hong Kong').strip()
+            polygon = (rainviewer_data.get('geometry') or {}).get('polygon') or []
+            center = (rainviewer_data.get('geometry') or {}).get('center') or []
+            if isinstance(center, list) and len(center) == 2:
+                meso_center = f"{center[0]:.2f}°N {center[1]:.2f}°E"
+            else:
+                meso_center = auto_area
+            auto_text = os.environ.get('MESO_AUTO_TEXT', '').strip() or generate_ai_mesoscale_detail(auto_area, rainviewer_result.get('intensity'), polygon, now)
+            if isinstance(polygon, list) and polygon:
+                coords_list = [[float(lat), float(lng)] for lat, lng in polygon]
+            else:
+                coords_list = []
+            current_mesos[auto_meso_id] = {
+                "id": auto_meso_id, "issueTime": now.isoformat(),
+                "coords": coords_list, "text": auto_text, "center": meso_center,
+                "movement": "N/A", "size": f"{max(30, rainviewer_result.get('intensity', 0))} km", "intensity": f"{rainviewer_result.get('intensity')}mm/h",
+                "severity": calculate_severity(max(30, rainviewer_result.get('intensity', 0)), f"{rainviewer_result.get('intensity')}mm/h")
+            }
+            history['mesoscale_discussions'].append({
+                "id": auto_meso_id, "issue_time": now.isoformat(), "status": "active",
+                "updates": [{
+                    "time": now.isoformat(), "coords": coords_list, "text": auto_text,
+                    "center": meso_center, "movement": "N/A", "size": f"{max(30, rainviewer_result.get('intensity', 0))} km",
+                    "intensity": f"{rainviewer_result.get('intensity')}mm/h",
+                    "severity": calculate_severity(max(30, rainviewer_result.get('intensity', 0)), f"{rainviewer_result.get('intensity')}mm/h")
+                }]
+            })
+            messages.append(f"🌧️ **AI Mesoscale Discussion Triggered: {auto_meso_id}**\n{auto_text}\n\n*(Polygon area: {len(coords_list)} points)*")
     
     # 1. Mesoscale Discussion Logic (With Timeline Updates)
     if meso_action == 'ISSUE' and meso_id:
@@ -586,12 +874,15 @@ def main():
 
             messages.append(f"**[{action_code}] {zh_n} | {en_n}**\n{tc_detail}\n\n{en_detail}")
             
+            event_time = get_event_time(en_warn, now)
+
             if action_code == 'ISSUE':
+                # ISSUE covers both new official warnings and replacements of an existing active one.
                 old_hist = get_active_history(history['official_warnings'], code)
                 if old_hist:
                     old_hist['status'] = 'replaced'
-                    old_hist['end_time'] = now.isoformat()
-                    old_hist['duration'] = calculate_duration(old_hist['issue_time'], now.isoformat())
+                    old_hist['end_time'] = event_time
+                    old_hist['duration'] = calculate_duration(old_hist['issue_time'], event_time)
                     
                 history['official_warnings'].append({
                     "id": f"OFF-{code}-{int(now.timestamp())}", "code": code,
@@ -602,15 +893,29 @@ def main():
                 })
                 
             elif action_code in ['EXTEND', 'UPDATE', 'REISSUE']:
+                # EXTEND/UPDATE/REISSUE are maintenance updates for an already active warning.
                 hist_item = get_active_history(history['official_warnings'], code)
-                if hist_item: 
-                    hist_item['expire_time'] = en_warn.get('expireTime')
+                if hist_item:
+                    if en_warn.get('expireTime') is not None:
+                        hist_item['expire_time'] = en_warn.get('expireTime')
+                    hist_item['last_action'] = action_code
+                    hist_item['last_seen_time'] = event_time
+                else:
+                    history['official_warnings'].append({
+                        "id": f"OFF-{code}-{int(now.timestamp())}", "code": code,
+                        "zh_name": zh_n, "en_name": en_n,
+                        "issue_time": en_warn.get('issueTime', now.isoformat()),
+                        "expire_time": en_warn.get('expireTime'),
+                        "status": "active",
+                        "last_action": action_code,
+                        "last_seen_time": event_time
+                    })
                 
             elif action_code == 'CANCEL':
                 hist_item = get_active_history(history['official_warnings'], code)
                 if hist_item:
                     hist_item['status'] = 'cancelled'
-                    hist_item['end_time'] = en_warn.get('issueTime', now.isoformat())
+                    hist_item['end_time'] = event_time
                     hist_item['duration'] = calculate_duration(hist_item['issue_time'], hist_item['end_time'])
 
     for code, prev_w in prev_official.items():

@@ -1,0 +1,116 @@
+import importlib.util
+import sys
+import types
+from pathlib import Path
+
+pil_module = types.ModuleType('PIL')
+pil_image_module = types.ModuleType('PIL.Image')
+pil_draw_module = types.ModuleType('PIL.ImageDraw')
+pil_font_module = types.ModuleType('PIL.ImageFont')
+pil_image_module.open = lambda *args, **kwargs: None
+pil_draw_module.Draw = lambda *args, **kwargs: None
+pil_font_module.truetype = lambda *args, **kwargs: None
+pil_font_module.load_default = lambda: None
+sys.modules['PIL'] = pil_module
+sys.modules['PIL.Image'] = pil_image_module
+sys.modules['PIL.ImageDraw'] = pil_draw_module
+sys.modules['PIL.ImageFont'] = pil_font_module
+
+MODULE_PATH = Path(__file__).resolve().parents[1] / 'bot.py'
+spec = importlib.util.spec_from_file_location('bot', MODULE_PATH)
+bot = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(bot)
+
+
+def test_official_cancel_uses_update_time_for_end_time():
+    history = {"official_warnings": []}
+    official_en = {
+        "WHOT": {
+            "code": "WHOT",
+            "name": "Very Hot Weather Warning",
+            "issueTime": "2026-07-10T11:30:00+08:00",
+            "expireTime": None,
+            "actionCode": "CANCEL",
+            "updateTime": "2026-07-11T18:45:25.207096+08:00",
+        }
+    }
+
+    hist_item = {
+        "id": "OFF-WHOT-1",
+        "code": "WHOT",
+        "issue_time": "2026-07-10T11:30:00+08:00",
+        "status": "active",
+    }
+    history["official_warnings"].append(hist_item)
+
+    bot.get_active_history = lambda items, type_code, key_name='code': next((item for item in items if item.get('status') == 'active' and item.get(key_name) == type_code), None)
+
+    if official_en["WHOT"].get("actionCode") == "CANCEL":
+        hist_item = bot.get_active_history(history["official_warnings"], "WHOT")
+        if hist_item:
+            hist_item['status'] = 'cancelled'
+            hist_item['end_time'] = bot.get_event_time(official_en["WHOT"])
+            hist_item['duration'] = bot.calculate_duration(hist_item['issue_time'], hist_item['end_time'])
+
+    assert hist_item['status'] == 'cancelled'
+    assert hist_item['end_time'] == '2026-07-11T18:45:25.207096+08:00'
+    assert hist_item['duration'] == '31h 15m'
+
+
+def test_reissue_updates_existing_history_without_duplication():
+    history = {"official_warnings": []}
+    official_en = {
+        "WTS": {
+            "code": "WTS",
+            "name": "Thunderstorm Warning",
+            "issueTime": "2026-07-13T07:00:00+08:00",
+            "expireTime": "2026-07-13T10:00:00+08:00",
+            "actionCode": "REISSUE",
+            "updateTime": "2026-07-13T07:30:00+08:00",
+        }
+    }
+
+    existing = {
+        "id": "OFF-WTS-1",
+        "code": "WTS",
+        "issue_time": "2026-07-13T07:00:00+08:00",
+        "expire_time": "2026-07-13T08:00:00+08:00",
+        "status": "active",
+    }
+    history["official_warnings"].append(existing)
+
+    bot.get_active_history = lambda items, type_code, key_name='code': next((item for item in items if item.get('status') == 'active' and item.get(key_name) == type_code), None)
+
+    action_code = official_en["WTS"].get("actionCode")
+    event_time = bot.get_event_time(official_en["WTS"])
+    if action_code in ['EXTEND', 'UPDATE', 'REISSUE']:
+        hist_item = bot.get_active_history(history["official_warnings"], "WTS")
+        if hist_item:
+            hist_item['expire_time'] = official_en["WTS"].get('expireTime')
+            hist_item['last_action'] = action_code
+            hist_item['last_seen_time'] = event_time
+
+    assert len(history["official_warnings"]) == 1
+    assert history["official_warnings"][0]['expire_time'] == '2026-07-13T10:00:00+08:00'
+    assert history["official_warnings"][0]['last_action'] == 'REISSUE'
+
+
+def test_rainviewer_assessment_triggers_for_heavy_cells():
+    payload = {
+        "current": {
+            "rain": {
+                "1h": 35,
+                "area": "South China Sea"
+            }
+        },
+        "past": [
+            {"precipitation": {"max": 35}},
+            {"precipitation": {"max": 25}}
+        ]
+    }
+
+    result = bot.assess_rainviewer_activity(payload)
+
+    assert result['should_issue'] is True
+    assert result['intensity'] >= 35
+    assert 'South China Sea' in result['summary'] or 'South China Sea' in result['area']
