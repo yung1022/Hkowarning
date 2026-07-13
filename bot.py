@@ -1,5 +1,6 @@
 import os
 import json
+import math
 import requests
 import re
 from io import BytesIO
@@ -16,6 +17,7 @@ HKO_WARNINFO_TC = 'https://data.weather.gov.hk/weatherAPI/opendata/weather.php?d
 
 STATE_FILE = 'warning_state.json'
 HISTORY_FILE = 'history.json'
+MESO_COUNTER_FILE = 'meso_counter.json'
 IMAGE_FILE = 'current_warnings.png'
 RAINVIEWER_API_URL = 'https://api.rainviewer.com/public/weather-maps.json'
 RAINVIEWER_TILE_HOST = 'https://tilecache.rainviewer.com'
@@ -224,6 +226,76 @@ def analyze_rainviewer_pixels(img):
     }
 
 
+def extract_rain_clusters(img):
+    if img is None:
+        return []
+
+    width, height = img.size
+    candidate_pixels = {}
+    for y in range(height):
+        for x in range(width):
+            pixel = img.getpixel((x, y))
+            if len(pixel) >= 4:
+                r, g, b, a = pixel[:4]
+            else:
+                r = g = b = a = 0
+            if a < 40:
+                continue
+            brightness = max(r, g, b)
+            if brightness >= RAINVIEWER_PIXEL_BRIGHTNESS_THRESHOLD:
+                candidate_pixels[(x, y)] = brightness
+
+    if not candidate_pixels:
+        return []
+
+    clusters = []
+    directions = [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)]
+    remaining = set(candidate_pixels)
+    while remaining:
+        stack = [remaining.pop()]
+        cluster_points = [stack[0]]
+        while stack:
+            cx, cy = stack.pop()
+            for dx, dy in directions:
+                nx, ny = cx + dx, cy + dy
+                if (nx, ny) in remaining:
+                    remaining.remove((nx, ny))
+                    stack.append((nx, ny))
+                    cluster_points.append((nx, ny))
+        clusters.append(cluster_points)
+
+    def cluster_score(points):
+        return -len(points), -max(candidate_pixels[p] for p in points)
+
+    clusters.sort(key=cluster_score)
+    result = []
+    for points in clusters:
+        hull = build_convex_hull(points)
+        xs = [p[0] for p in points]
+        ys = [p[1] for p in points]
+        center_x = sum(xs) / len(xs)
+        center_y = sum(ys) / len(ys)
+        intensity = int(min(100, max(RAINVIEWER_TRIGGER_INTENSITY, max(candidate_pixels[p] for p in points))))
+        result.append({
+            'points': points,
+            'hull': hull,
+            'hull_pixels': [[int(x), int(y)] for x, y in hull],
+            'center_pixels': [center_x, center_y],
+            'intensity': intensity,
+            'pixel_count': len(points),
+        })
+    return result
+
+
+def format_latlon_center(center):
+    if not center or len(center) != 2:
+        return ""
+    lat, lon = center
+    lat_dir = 'N' if lat >= 0 else 'S'
+    lon_dir = 'E' if lon >= 0 else 'W'
+    return f"{abs(lat):.2f}°{lat_dir} {abs(lon):.2f}°{lon_dir}"
+
+
 def project_to_hong_kong(x, y, width, height):
     if width <= 0 or height <= 0:
         return (HONG_KONG_BOUNDS['lat_max'], HONG_KONG_BOUNDS['lon_min'])
@@ -233,6 +305,31 @@ def project_to_hong_kong(x, y, width, height):
     lat = HONG_KONG_BOUNDS['lat_max'] - y_norm * (HONG_KONG_BOUNDS['lat_max'] - HONG_KONG_BOUNDS['lat_min'])
     lon = HONG_KONG_BOUNDS['lon_min'] + x_norm * (HONG_KONG_BOUNDS['lon_max'] - HONG_KONG_BOUNDS['lon_min'])
     return round(lat, 4), round(lon, 4)
+
+
+def latlon_distance_km(a, b):
+    if not a or not b or len(a) != 2 or len(b) != 2:
+        return float('inf')
+    lat1, lon1 = a
+    lat2, lon2 = b
+    dlat = (lat2 - lat1) * 111.0
+    dlon = (lon2 - lon1) * 111.0 * abs(math.cos(math.radians((lat1 + lat2) / 2)))
+    return math.hypot(dlat, dlon)
+
+
+def find_matching_meso(cluster, current_mesos, threshold_km=12):
+    best_id = None
+    best_distance = threshold_km * 2
+    cluster_center = cluster.get('center') or []
+    for meso_id, meso_data in current_mesos.items():
+        meso_center = meso_data.get('center')
+        if isinstance(meso_center, str):
+            continue
+        dist = latlon_distance_km(cluster_center, meso_center)
+        if dist < best_distance:
+            best_distance = dist
+            best_id = meso_id
+    return best_id if best_distance <= threshold_km else None
 
 
 def build_convex_hull(points):
@@ -342,6 +439,21 @@ def fetch_rainviewer_payload():
             [lat_center + 0.005, lon_center - 0.005],
         ]
 
+    clusters_payload = []
+    for cluster in extract_rain_clusters(img):
+        cluster_center = project_to_hong_kong(cluster['center_pixels'][0], cluster['center_pixels'][1], width, height)
+        cluster_polygon = [project_to_hong_kong(x, y, width, height) for x, y in cluster['hull_pixels']]
+        if len(cluster_polygon) < 3:
+            continue
+        clusters_payload.append({
+            'polygon': cluster_polygon,
+            'hull_pixels': cluster['hull_pixels'],
+            'center': cluster_center,
+            'center_pixels': cluster['center_pixels'],
+            'intensity': cluster['intensity'],
+            'pixel_count': cluster['pixel_count'],
+        })
+
     area_name = os.environ.get('MESO_AREA_NAME', 'detected convective cell').strip() or 'detected convective cell'
     return {
         'source': 'rainviewer',
@@ -360,7 +472,9 @@ def fetch_rainviewer_payload():
         ],
         'geometry': {'polygon': polygon, 'center': [lat_center, lon_center]},
         'diagnostics': analysis,
+        'clusters': clusters_payload,
         'image_bytes': image_bytes,
+        'image_size': [width, height],
     }
 
 
@@ -406,21 +520,6 @@ def generate_ai_mesoscale_detail(area, intensity, polygon, now_dt=None):
     )
 
 
-def generate_meso_id(history, now_dt=None):
-    if not now_dt:
-        now_dt = datetime.now(ZoneInfo('Asia/Hong_Kong'))
-    date_tag = now_dt.strftime('%Y%m%d')
-    counter = 1
-    for item in history.get('mesoscale_discussions', []) or []:
-        item_id = item.get('id', '')
-        if item_id.startswith(f'{date_tag}-'):
-            try:
-                counter = max(counter, int(item_id.split('-')[-1]) + 1)
-            except ValueError:
-                continue
-    return f'{date_tag}-{counter:02d}'
-
-
 def load_json(filepath, default):
     if os.path.exists(filepath):
         try:
@@ -428,9 +527,25 @@ def load_json(filepath, default):
         except Exception: pass
     return default
 
+
 def save_json(filepath, data):
     with open(filepath, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+
+
+def get_next_meso_count():
+    counter_data = load_json(MESO_COUNTER_FILE, {'count': 0})
+    count = int(counter_data.get('count', 0)) + 1
+    save_json(MESO_COUNTER_FILE, {'count': count})
+    return count
+
+
+def generate_meso_id(history, now_dt=None):
+    if not now_dt:
+        now_dt = datetime.now(ZoneInfo('Asia/Hong_Kong'))
+    date_tag = now_dt.strftime('%Y%m%d')
+    count = get_next_meso_count()
+    return f'{date_tag}-{count:02d}'
 
 def get_active_history(history_list, type_code, key_name='code'):
     for item in history_list:
@@ -502,41 +617,49 @@ def generate_status_image(official_en, official_tc, custom_warns, chances, curre
     draw.text((20, 15), f"HKO Weather Monitoring Board ({now_str})", font=font_title, fill=(255, 255, 255))
 
     if rainviewer_data:
-        preview_w, preview_h = 360, 240
+        preview_w, preview_h = 420, 280
         image_bytes = rainviewer_data.get('image_bytes')
         preview_img = None
         if image_bytes:
             try:
-                preview_img = Image.open(BytesIO(image_bytes)).convert('RGBA').resize((preview_w, preview_h), Image.LANCZOS)
+                full_img = Image.open(BytesIO(image_bytes)).convert('RGBA')
+                source_w, source_h = full_img.size
+                preview_img = full_img.resize((preview_w, preview_h), Image.LANCZOS)
             except Exception:
                 preview_img = None
+                source_w, source_h = preview_w, preview_h
+        else:
+            preview_img = None
+            source_w, source_h = preview_w, preview_h
+
         if preview_img is None:
             preview_img = Image.new('RGBA', (preview_w, preview_h), (24, 24, 24, 255))
 
         overlay = Image.new('RGBA', preview_img.size, (0, 0, 0, 0))
         overlay_draw = ImageDraw.Draw(overlay)
-        diagnostics = rainviewer_data.get('diagnostics') or {}
-        rainy_points = diagnostics.get('rainy_points') or []
-        if rainy_points:
-            source_w, source_h = preview_img.size
-            scaled_points = []
-            for point in rainy_points:
-                x = int(point.get('x', 0) / max(1, source_w) * preview_w)
-                y = int(point.get('y', 0) / max(1, source_h) * preview_h)
-                scaled_points.append((x, y))
-            if len(scaled_points) >= 3:
-                hull = build_convex_hull(scaled_points)
-                if len(hull) >= 3:
-                    overlay_draw.polygon([(int(x), int(y)) for x, y in hull], fill=(255, 0, 0, 35), outline=(255, 0, 0, 220))
-            elif scaled_points:
-                overlay_draw.ellipse((0, 0, preview_w, preview_h), fill=(255, 0, 0, 25), outline=(255, 0, 0, 220))
+
+        clusters = rainviewer_data.get('clusters') or []
+        for idx, cluster in enumerate(clusters, start=1):
+            hull_pixels = cluster.get('hull_pixels') or []
+            if len(hull_pixels) >= 3:
+                scaled = [
+                    (
+                        int(x / max(1, source_w) * preview_w),
+                        int(y / max(1, source_h) * preview_h),
+                    )
+                    for x, y in hull_pixels
+                ]
+                overlay_draw.polygon(scaled, fill=(255, 255, 0, 35), outline=(255, 255, 0, 200))
+                label_x, label_y = scaled[0]
+                overlay_draw.text((label_x + 4, label_y + 4), f"M{idx}", font=font_detail, fill=(0, 0, 0))
 
         preview_img = Image.alpha_composite(preview_img, overlay)
-        img.paste(preview_img, (700, 70))
-        draw.rectangle([700, 70, 700 + preview_w, 70 + preview_h], outline=(255, 255, 255, 80), width=2)
+        img.paste(preview_img, (660, 70))
+        draw.rectangle([660, 70, 660 + preview_w, 70 + preview_h], outline=(255, 255, 255, 80), width=2)
         current_rain = (rainviewer_data.get('current') or {}).get('rain') or {}
         intensity = current_rain.get('1h') or current_rain.get('max') or 0
-        draw.text((700, 325), f"RainViewer • {intensity} mm/h threshold area", font=font_detail, fill=(255, 200, 100))
+        draw.text((660, 325), f"RainViewer • full colored radar image", font=font_detail, fill=(255, 200, 100))
+        draw.text((660, 345), f"15+ mm/h eligible areas highlighted", font=font_detail, fill=(255, 200, 100))
 
     # Official Warnings
     y = 80
@@ -713,35 +836,57 @@ def main():
     if rainviewer_data:
         rainviewer_result = assess_rainviewer_activity(rainviewer_data)
         if rainviewer_result.get('should_issue'):
-            auto_meso_id = os.environ.get('MESO_AUTO_ID', '').strip() or generate_meso_id(history, now)
-            auto_area = rainviewer_result.get('area') or os.environ.get('MESO_AUTO_AREA', 'Hong Kong').strip()
-            polygon = (rainviewer_data.get('geometry') or {}).get('polygon') or []
-            center = (rainviewer_data.get('geometry') or {}).get('center') or []
-            if isinstance(center, list) and len(center) == 2:
-                meso_center = f"{center[0]:.2f}°N {center[1]:.2f}°E"
-            else:
-                meso_center = auto_area
-            auto_text = os.environ.get('MESO_AUTO_TEXT', '').strip() or generate_ai_mesoscale_detail(auto_area, rainviewer_result.get('intensity'), polygon, now)
-            if isinstance(polygon, list) and polygon:
-                coords_list = [[float(lat), float(lng)] for lat, lng in polygon]
-            else:
-                coords_list = []
-            current_mesos[auto_meso_id] = {
-                "id": auto_meso_id, "issueTime": now.isoformat(),
-                "coords": coords_list, "text": auto_text, "center": meso_center,
-                "movement": "N/A", "size": f"{max(30, rainviewer_result.get('intensity', 0))} km", "intensity": f"{rainviewer_result.get('intensity')}mm/h",
-                "severity": calculate_severity(max(30, rainviewer_result.get('intensity', 0)), f"{rainviewer_result.get('intensity')}mm/h")
-            }
-            history['mesoscale_discussions'].append({
-                "id": auto_meso_id, "issue_time": now.isoformat(), "status": "active",
-                "updates": [{
-                    "time": now.isoformat(), "coords": coords_list, "text": auto_text,
-                    "center": meso_center, "movement": "N/A", "size": f"{max(30, rainviewer_result.get('intensity', 0))} km",
-                    "intensity": f"{rainviewer_result.get('intensity')}mm/h",
-                    "severity": calculate_severity(max(30, rainviewer_result.get('intensity', 0)), f"{rainviewer_result.get('intensity')}mm/h")
-                }]
-            })
-            messages.append(f"🌧️ **AI Mesoscale Discussion Triggered: {auto_meso_id}**\n{auto_text}\n\n*(Polygon area: {len(coords_list)} points)*")
+            clusters = rainviewer_data.get('clusters') or []
+            if not clusters:
+                clusters = [{'center': (rainviewer_data['geometry']['center'] if rainviewer_data.get('geometry') else []), 'polygon': (rainviewer_data['geometry']['polygon'] if rainviewer_data.get('geometry') else []), 'intensity': rainviewer_result.get('intensity', 0), 'pixel_count': 0}]
+
+            provided_auto_id = os.environ.get('MESO_AUTO_ID', '').strip()
+            for idx, cluster in enumerate(clusters, start=1):
+                cluster_center = cluster.get('center')
+                cluster_polygon = cluster.get('polygon') or []
+                cluster_intensity = cluster.get('intensity', rainviewer_result.get('intensity', 0))
+                if not cluster_center or not isinstance(cluster_center, (list, tuple)) or len(cluster_center) != 2:
+                    continue
+
+                match_id = find_matching_meso(cluster, current_mesos)
+                if match_id:
+                    meso_id = match_id
+                    m_data = current_mesos[meso_id]
+                    m_data['issueTime'] = m_data.get('issueTime') or now.isoformat()
+                    m_data['coords'] = cluster_polygon
+                    m_data['center'] = list(cluster_center)
+                    m_data['movement'] = 'N/A'
+                    m_data['size'] = f"{max(30, int(math.sqrt(cluster.get('pixel_count', 0)) * 1.5))} km"
+                    m_data['intensity'] = f"{cluster_intensity}mm/h"
+                    m_data['severity'] = calculate_severity(max(30, cluster_intensity), f"{cluster_intensity}mm/h")
+                    m_data['text'] = os.environ.get('MESO_AUTO_TEXT', '').strip() or generate_ai_mesoscale_detail(rainviewer_result.get('area') or 'Hong Kong', cluster_intensity, cluster_polygon, now)
+                    history_item = get_active_history(history['mesoscale_discussions'], meso_id, key_name='id')
+                    if history_item:
+                        history_item.setdefault('updates', []).append({
+                            'time': now.isoformat(), 'coords': cluster_polygon, 'text': m_data['text'],
+                            'center': m_data['center'], 'movement': m_data['movement'], 'size': m_data['size'],
+                            'intensity': m_data['intensity'], 'severity': m_data['severity'],
+                        })
+                    messages.append(f"🔄 **Mesoscale Discussion Updated: {meso_id}**\n{m_data['text']}")
+                else:
+                    meso_id = provided_auto_id if provided_auto_id and idx == 1 else generate_meso_id(history, now)
+                    m_text = os.environ.get('MESO_AUTO_TEXT', '').strip() or generate_ai_mesoscale_detail(rainviewer_result.get('area') or 'Hong Kong', cluster_intensity, cluster_polygon, now)
+                    current_mesos[meso_id] = {
+                        'id': meso_id, 'issueTime': now.isoformat(),
+                        'coords': cluster_polygon, 'text': m_text, 'center': list(cluster_center),
+                        'movement': 'N/A', 'size': f"{max(30, int(math.sqrt(cluster.get('pixel_count', 0)) * 1.5))} km",
+                        'intensity': f"{cluster_intensity}mm/h",
+                        'severity': calculate_severity(max(30, cluster_intensity), f"{cluster_intensity}mm/h")
+                    }
+                    history['mesoscale_discussions'].append({
+                        'id': meso_id, 'issue_time': now.isoformat(), 'status': 'active',
+                        'updates': [{
+                            'time': now.isoformat(), 'coords': cluster_polygon, 'text': m_text,
+                            'center': list(cluster_center), 'movement': 'N/A', 'size': f"{max(30, int(math.sqrt(cluster.get('pixel_count', 0)) * 1.5))} km",
+                            'intensity': f"{cluster_intensity}mm/h", 'severity': calculate_severity(max(30, cluster_intensity), f"{cluster_intensity}mm/h")
+                        }]
+                    })
+                    messages.append(f"🌧️ **AI Mesoscale Discussion Issued: {meso_id}**\n{m_text}")
     
     # 1. Mesoscale Discussion Logic (With Timeline Updates)
     if meso_action == 'ISSUE' and meso_id:
