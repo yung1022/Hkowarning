@@ -942,7 +942,7 @@ def main():
     prev_official = state_data.get("official", {})
     chances = state_data.get("chances", {})
     current_customs = state_data.get("custom", {})
-    current_mesos = state_data.get("mesoscale", {})
+    current_mesos = {} # this broke the whole thing so doing this to fix.
         
     history = load_json(HISTORY_FILE, {})
     for k in ["official_warnings", "custom_warnings", "mesoscale_discussions", "announcements"]:
