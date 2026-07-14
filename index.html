@@ -86,7 +86,16 @@
                 <button class="admin-btn" onclick="runRadarFetchTest()">🧪 Test Radar Fetch</button>
                 <span id="radar-test-status" style="color:#f39c12; font-size:0.95em;">No radar test run yet.</span>
             </div>
-            <canvas id="radar-test-canvas" width="256" height="256" style="width:100%; max-width:320px; border:1px solid #444; background:#000;"></canvas>
+            <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:flex-start;">
+                <div>
+                    <div style="font-size:0.9em; color:#9aa0a6; margin-bottom:6px;">Colored radar</div>
+                    <canvas id="radar-test-canvas" width="256" height="256" style="width:100%; max-width:320px; border:1px solid #444; background:#000;"></canvas>
+                </div>
+                <div>
+                    <div style="font-size:0.9em; color:#9aa0a6; margin-bottom:6px;">15+ mm/h red overlay</div>
+                    <canvas id="radar-overlay-canvas" width="256" height="256" style="width:100%; max-width:320px; border:1px solid #444; background:#000;"></canvas>
+                </div>
+            </div>
         </div>
     </div>
     
@@ -229,58 +238,55 @@
     function runRadarFetchTest() {
         const status = document.getElementById('radar-test-status');
         const canvas = document.getElementById('radar-test-canvas');
+        const overlayCanvas = document.getElementById('radar-overlay-canvas');
         const ctx = canvas.getContext('2d');
+        const overlayCtx = overlayCanvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        status.textContent = 'Fetching latest radar image...';
+        overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+        status.textContent = 'Fetching Hong Kong radar image...';
 
-        fetch('https://api.rainviewer.com/public/weather-maps.json')
-            .then(r => r.json())
-            .then(data => {
-                const latest = data.radar && data.radar.past ? data.radar.past[data.radar.past.length - 1] : null;
-                if (!latest || !latest.path) {
-                    status.textContent = 'No radar tile available yet.';
-                    return;
-                }
+        const radarUrl = 'https://tilecache.rainviewer.com/v2/radar/1f3c2f52cac1/512/5/22.3193/114.1694/2/1_1.png';
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            overlayCtx.drawImage(img, 0, 0, overlayCanvas.width, overlayCanvas.height);
 
-                const img = new Image();
-                img.crossOrigin = 'anonymous';
-                img.onload = () => {
-                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                    const pixels = imageData.data;
-                    let rainyPixels = 0;
-                    let maxBrightness = 0;
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const overlayData = overlayCtx.getImageData(0, 0, overlayCanvas.width, overlayCanvas.height);
+            const pixels = imageData.data;
+            const overlayPixels = overlayData.data;
+            let rainyPixels = 0;
+            let maxBrightness = 0;
 
-                    for (let y = 0; y < canvas.height; y++) {
-                        for (let x = 0; x < canvas.width; x++) {
-                            const i = (y * canvas.width + x) * 4;
-                            const r = pixels[i];
-                            const g = pixels[i + 1];
-                            const b = pixels[i + 2];
-                            const a = pixels[i + 3];
-                            if (a < 40) continue;
-                            const brightness = Math.max(r, g, b);
-                            maxBrightness = Math.max(maxBrightness, brightness);
-                            const colorSpan = Math.abs(r - g) + Math.abs(g - b) + Math.abs(b - r);
-                            if (brightness >= 80 && (colorSpan >= 20 || brightness >= 140)) {
-                                rainyPixels += 1;
-                                ctx.fillStyle = 'rgba(255, 70, 70, 0.8)';
-                                ctx.fillRect(x, y, 2, 2);
-                            }
-                        }
+            for (let y = 0; y < canvas.height; y++) {
+                for (let x = 0; x < canvas.width; x++) {
+                    const i = (y * canvas.width + x) * 4;
+                    const r = pixels[i];
+                    const g = pixels[i + 1];
+                    const b = pixels[i + 2];
+                    const a = pixels[i + 3];
+                    if (a < 40) continue;
+                    const brightness = Math.max(r, g, b);
+                    maxBrightness = Math.max(maxBrightness, brightness);
+                    const colorSpan = Math.abs(r - g) + Math.abs(g - b) + Math.abs(b - r);
+                    if (brightness >= 80 && (colorSpan >= 20 || brightness >= 140)) {
+                        rainyPixels += 1;
+                        overlayPixels[i] = 255;
+                        overlayPixels[i + 1] = 70;
+                        overlayPixels[i + 2] = 70;
+                        overlayPixels[i + 3] = 160;
                     }
+                }
+            }
 
-                    status.textContent = `Radar test complete: ${rainyPixels} highlighted rain pixels detected (max brightness ${maxBrightness}).`;
-                };
-                img.onerror = () => {
-                    status.textContent = 'Radar test failed to load the tile image.';
-                };
-                img.src = `https://tilecache.rainviewer.com${latest.path}/256/0/0/0/2/1_1.png`;
-            })
-            .catch(err => {
-                console.warn('Radar fetch test unavailable:', err);
-                status.textContent = 'Radar test failed.';
-            });
+            overlayCtx.putImageData(overlayData, 0, 0);
+            status.textContent = `Hong Kong radar ready: ${rainyPixels} highlighted rain pixels detected (max brightness ${maxBrightness}).`;
+        };
+        img.onerror = () => {
+            status.textContent = 'Hong Kong radar test failed to load the tile image.';
+        };
+        img.src = radarUrl;
     }
 
     // Rendering Logic for specific Timestamp

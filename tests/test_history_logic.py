@@ -158,3 +158,39 @@ def test_hong_kong_projection_stays_within_hk_bbox():
     assert top_left[1] <= bot.HONG_KONG_BOUNDS['lon_max']
     assert bottom_right[0] <= top_left[0]
     assert bottom_right[1] >= top_left[1]
+
+
+def test_rainviewer_overlay_detects_threshold_pixels():
+    img = bot.Image.new('RGBA', (4, 4), (0, 0, 0, 0))
+    for x in range(2):
+        for y in range(2):
+            img.putpixel((x, y), (255, 255, 255, 255))
+    img.putpixel((2, 2), (255, 255, 0, 255))
+    img.putpixel((3, 2), (255, 0, 0, 255))
+
+    result = bot.build_rainviewer_overlay(img)
+
+    assert result['highlight_pixels'] >= 2
+    assert result['clusters']
+    assert result['html']
+
+
+def test_auto_meso_message_includes_area_and_center():
+    message = bot.build_auto_meso_message('MESO-001', 'Hong Kong', [22.3, 114.2], 32, 'Storm discussion active')
+
+    assert 'MESO-001' in message
+    assert 'Hong Kong' in message
+    assert '22.3' in message
+    assert '32' in message
+
+
+def test_auto_meso_message_includes_rain_and_severity():
+    message = bot.build_auto_meso_message('MESO-002', 'Hong Kong', [22.3, 114.2], 32, 'Storm discussion active', intensity=18.5, severity='S3')
+
+    assert '18.5' in message
+    assert 'S3' in message
+
+
+def test_calculate_severity_matches_html_logic():
+    assert bot.calculate_severity('30', '70mm/h') == 'S4'
+    assert bot.calculate_severity('60', '20mm/h') == 'S2'
