@@ -28,10 +28,10 @@ RAINVIEWER_DBZ_THRESHOLD = 42.0
 RAINVIEWER_PIXEL_BRIGHTNESS_THRESHOLD = 80
 RAINVIEWER_PIXEL_COLOR_SPAN_THRESHOLD = 20
 HONG_KONG_BOUNDS = {
-    'lat_min': 22.135,
-    'lat_max': 22.55,
-    'lon_min': 113.80,
-    'lon_max': 114.60,
+    'lat_min': 21.943,
+    'lat_max': 24.5271,
+    'lon_min': 112.5,
+    'lon_max': 115.3125,
 }
 
 # --- SEVERITY ENGINE (S1 - S5) ---
