@@ -1,5 +1,15 @@
 {
-  "official": {},
+  "official": {
+    "WTS": {
+      "name": "Thunderstorm Warning",
+      "code": "WTS",
+      "actionCode": "EXTEND",
+      "issueTime": "2026-07-14T03:45:00+08:00",
+      "expireTime": "2026-07-14T09:15:00+08:00",
+      "updateTime": "2026-07-14T07:15:00+08:00",
+      "tc_name": "雷暴警告"
+    }
+  },
   "custom": {
     "White Rainstorm Watch": {
       "type": "White Rainstorm Watch",
@@ -11,62 +21,5 @@
   "chances": {
     "red": ""
   },
-  "mesoscale": {
-    "20260713-03": {
-      "id": "20260713-03",
-      "issueTime": "2026-07-13T17:25:05.914227+08:00",
-      "coords": [
-        [
-          22.6516,
-          116.0486
-        ],
-        [
-          22.3521,
-          115.8014
-        ],
-        [
-          21.9859,
-          115.73
-        ],
-        [
-          21.8228,
-          115.2246
-        ],
-        [
-          21.5165,
-          115.2026
-        ],
-        [
-          21.3222,
-          115.6696
-        ],
-        [
-          21.3682,
-          116.2628
-        ],
-        [
-          21.6391,
-          116.4386
-        ],
-        [
-          22.0521,
-          116.6528
-        ],
-        [
-          22.5806,
-          116.5869
-        ],
-        [
-          22.6972,
-          116.3397
-        ]
-      ],
-      "text": "Might affect Hong Kong in a few hours.",
-      "center": "22.0°N 115.9°E",
-      "movement": "WNW at 28 km/h",
-      "size": "214 km",
-      "intensity": "50mm/h",
-      "severity": "S4"
-    }
-  }
+  "mesoscale": {}
 }

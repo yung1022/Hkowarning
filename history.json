@@ -50,6 +50,17 @@
       "status": "cancelled",
       "end_time": "2026-07-10T11:30:00+08:00",
       "duration": "0h 0m"
+    },
+    {
+      "id": "OFF-WTS-1783972848",
+      "code": "WTS",
+      "zh_name": "雷暴警告",
+      "en_name": "Thunderstorm Warning",
+      "issue_time": "2026-07-14T03:45:00+08:00",
+      "expire_time": "2026-07-14T09:15:00+08:00",
+      "status": "active",
+      "last_action": "EXTEND",
+      "last_seen_time": "2026-07-14T07:15:00+08:00"
     }
   ],
   "custom_warnings": [
@@ -538,7 +549,7 @@
     {
       "id": "20260713-03",
       "issue_time": "2026-07-13T17:25:05.914227+08:00",
-      "status": "active",
+      "status": "cancelled",
       "updates": [
         {
           "time": "2026-07-13T17:25:05.914227+08:00",
@@ -595,7 +606,9 @@
           "intensity": "50mm/h",
           "severity": "S4"
         }
-      ]
+      ],
+      "end_time": "2026-07-13T23:39:04.123540+08:00",
+      "duration": "6h 13m"
     },
     {
       "id": "20260713-04",
