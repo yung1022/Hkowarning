@@ -945,6 +945,7 @@ def main():
     current_mesos = {} # this broke the whole thing so doing this to fix.
         
     history = load_json(HISTORY_FILE, {})
+    history['mesoscale_discussions'] = []
     for k in ["official_warnings", "custom_warnings", "mesoscale_discussions", "announcements"]:
         history.setdefault(k, [])
     
