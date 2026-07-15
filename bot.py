@@ -1134,7 +1134,7 @@ def main():
                     continue
 
                 match_id = find_matching_meso(cluster, current_mesos)
-                size_km = max(30, int(math.sqrt(cluster.get('pixel_count', 0)) * 1.5))
+                size_km = max(0, int(math.sqrt(cluster.get('pixel_count', 0)) * 1.5))
                 auto_text = os.environ.get('MESO_AUTO_TEXT', '').strip() or generate_ai_mesoscale_detail(rainviewer_result.get('area') or 'Hong Kong', cluster_intensity, cluster_polygon, now)
                 if match_id:
                     meso_id = match_id
