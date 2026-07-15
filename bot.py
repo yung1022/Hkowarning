@@ -654,6 +654,11 @@ def fetch_rainviewer_payload():
         response.raise_for_status()
         image_bytes = response.content
         img = Image.open(BytesIO(image_bytes)).convert('RGBA')
+        # Convert the image to an 8-bit palette map, which kills smooth blending gradients
+        img_palette = img.convert('P', palette=Image.Palette.ADAPTIVE, colors=256)
+
+        # Convert it back to RGBA - the colors will now be locked into sharp steps
+        img = img_palette.convert('RGBA')
     except Exception:
         return {}
 
