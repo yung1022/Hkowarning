@@ -352,9 +352,9 @@ def estimate_pixel_rain_metrics(pixel):
     # Accept the closest true color cell block if it falls within the tolerance window
     if min_distance < 60:
         dbz = closest_dbz
-
+    else:
     # Return safe background marker for unexpected edge color combinations
-    dbz = float('-inf')
+        dbz = float('-inf')
 
 
     return {
