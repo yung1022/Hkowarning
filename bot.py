@@ -320,6 +320,7 @@ def estimate_pixel_rain_metrics(pixel):
             dbz = float(i)
             break
     else:
+        print(f'Warning: Pixel color does not match any known RainViewer legacy RGBA mapping. Using default dbz value of -inf. Value of rgba: {(r, g, b, a)}')
         dbz = float('-inf')
     return {
         'brightness': brightness,
