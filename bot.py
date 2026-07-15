@@ -328,7 +328,7 @@ def estimate_pixel_rain_metrics(pixel):
     }
 
     for i in range(-32, 61):
-        rgba = rainviewer_legacy_rgba.get(i, {}).get("rain", (0, 0, 0, 0))
+        rgba = rainviewer_complete_rgba.get(i, {}).get("rain", (0, 0, 0, 0))
         if (r, g, b, a) == rgba:
             dbz = float(i)
             break
