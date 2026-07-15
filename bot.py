@@ -25,7 +25,7 @@ rainviewerurl = "https://api.rainviewer.com/public/weather-maps.json"
 response = requests.get(rainviewerurl)
 data = response.json()
 finaldata = data["radar"]["past"][-1]["path"]
-RAINVIEWER_HK_TILE_URL = f'https://tilecache.rainviewer.com{finaldata}/512/5/22.3193/114.1694/2/1_1.png'
+RAINVIEWER_HK_TILE_URL = f'https://tilecache.rainviewer.com{finaldata}/512/5/22.3193/114.1694/2/0_0.png'
 RAINVIEWER_TILE_HOST = 'https://tilecache.rainviewer.com'
 RAINVIEWER_TRIGGER_INTENSITY = 15
 RAINVIEWER_DBZ_THRESHOLD = 42.0
@@ -327,7 +327,8 @@ def estimate_pixel_rain_metrics(pixel):
         }
     }
 
-    for i in range(-32, 61):
+    # Change the stop value to 96 so it evaluates every integer from -32 up to 95
+    for i in range(-32, 96):
         rgba = rainviewer_complete_rgba.get(i, {}).get("rain", (0, 0, 0, 0))
         if (r, g, b, a) == rgba:
             dbz = float(i)
@@ -335,6 +336,7 @@ def estimate_pixel_rain_metrics(pixel):
     else:
         print(f'Warning: Pixel color does not match any known RainViewer legacy RGBA mapping. Using default dbz value of -inf. Value of rgba: {(r, g, b, a)}')
         dbz = float('-inf')
+
     return {
         'brightness': brightness,
         'color_span': color_span,
