@@ -199,35 +199,20 @@ def estimate_pixel_rain_metrics(pixel):
         r = g = b = a = 0
     brightness = max(r, g, b)
     color_span = abs(r - g) + abs(g - b) + abs(b - r)
-    # RainViewer Legacy Style (Universal Blue) - Full RGBA Channel Mapping Table
-# Format: { dbz_integer: {"rain": (R, G, B, A), "snow": (R, G, B, A)} }
+        # Complete RainViewer Reference Dictionary (-32 dBZ to +95 dBZ)
+    # Format: { dbz_integer: {"rain": (R, G, B, A), "snow": (R, G, B, A)} }
 
-    rainviewer_legacy_rgba = {
-        # No precipitation / Below threshold levels
-        -32: {"rain": (0, 0, 0, 0), "snow": (0, 0, 0, 0)},
-        -31: {"rain": (0, 0, 0, 0), "snow": (0, 0, 0, 0)},
-        -30: {"rain": (0, 0, 0, 0), "snow": (0, 0, 0, 0)},
-        -29: {"rain": (0, 0, 0, 0), "snow": (0, 0, 0, 0)},
-        -28: {"rain": (0, 0, 0, 0), "snow": (0, 0, 0, 0)},
-        -27: {"rain": (0, 0, 0, 0), "snow": (0, 0, 0, 0)},
-        -26: {"rain": (0, 0, 0, 0), "snow": (0, 0, 0, 0)},
-        -25: {"rain": (0, 0, 0, 0), "snow": (0, 0, 0, 0)},
-        -24: {"rain": (0, 0, 0, 0), "snow": (0, 0, 0, 0)},
-        -23: {"rain": (0, 0, 0, 0), "snow": (0, 0, 0, 0)},
-        -22: {"rain": (0, 0, 0, 0), "snow": (0, 0, 0, 0)},
-        -21: {"rain": (0, 0, 0, 0), "snow": (0, 0, 0, 0)},
-        -20: {"rain": (0, 0, 0, 0), "snow": (0, 0, 0, 0)},
-        -19: {"rain": (0, 0, 0, 0), "snow": (0, 0, 0, 0)},
-        -18: {"rain": (0, 0, 0, 0), "snow": (0, 0, 0, 0)},
-        -17: {"rain": (0, 0, 0, 0), "snow": (0, 0, 0, 0)},
-        -16: {"rain": (0, 0, 0, 0), "snow": (0, 0, 0, 0)},
-        -15: {"rain": (0, 0, 0, 0), "snow": (0, 0, 0, 0)},
-        -14: {"rain": (0, 0, 0, 0), "snow": (0, 0, 0, 0)},
-        -13: {"rain": (0, 0, 0, 0), "snow": (0, 0, 0, 0)},
-        -12: {"rain": (0, 0, 0, 0), "snow": (0, 0, 0, 0)},
-        -11: {"rain": (0, 0, 0, 0), "snow": (0, 0, 0, 0)},
+    rainviewer_complete_rgba = {
+        # ==========================================
+        # 1. CLEAR AIR & NO ECHO (-32 TO -11 dBZ)
+        # Fully transparent baseline background levels
+        # ==========================================
+        **{dbz: {"rain": (0, 0, 0, 0), "snow": (0, 0, 0, 0)} for dbz in range(-32, -10)},
 
-        # Atmospheric clutter / Initial ground humidity signals
+        # ==========================================
+        # 2. GROUND CLUTTER & NOISE BOUNDARY (-10 TO -1 dBZ)
+        # Weak atmospheric signals / Fog edges
+        # ==========================================
         -10: {"rain": (99, 97, 89, 20), "snow": (207, 255, 255, 0)},
         -9: {"rain": (102, 99, 90, 25), "snow": (206, 255, 255, 12)},
         -8: {"rain": (105, 102, 92, 30), "snow": (205, 255, 255, 25)},
@@ -239,7 +224,10 @@ def estimate_pixel_rain_metrics(pixel):
         -2: {"rain": (124, 117, 101, 62), "snow": (200, 255, 255, 102)},
         -1: {"rain": (127, 120, 103, 68), "snow": (199, 255, 255, 114)},
 
-        # Very light overcast / Drizzle boundary layers
+        # ==========================================
+        # 3. LIGHT MIST & DRIZZLE (0 TO 9 dBZ)
+        # Passing overcast layers
+        # ==========================================
         0: {"rain": (130, 123, 105, 73), "snow": (199, 255, 255, 127)},
         1: {"rain": (133, 125, 106, 78), "snow": (198, 255, 255, 140)},
         2: {"rain": (136, 128, 108, 84), "snow": (197, 255, 255, 153)},
@@ -251,7 +239,10 @@ def estimate_pixel_rain_metrics(pixel):
         8: {"rain": (182, 169, 126, 130), "snow": (192, 255, 255, 229)},
         9: {"rain": (194, 180, 130, 140), "snow": (191, 255, 255, 242)},
 
-        # Noticeable light rain / Standard drizzle
+        # ==========================================
+        # 4. MEASURABLE PRECIPITATION (10 TO 19 dBZ)
+        # Continuous sprinkles
+        # ==========================================
         10: {"rain": (206, 192, 135, 150), "snow": (191, 255, 255, 255)},
         11: {"rain": (210, 196, 139, 160), "snow": (184, 248, 255, 255)},
         12: {"rain": (214, 200, 143, 170), "snow": (178, 242, 255, 255)},
@@ -263,7 +254,10 @@ def estimate_pixel_rain_metrics(pixel):
         18: {"rain": (66, 255, 95, 206), "snow": (139, 202, 255, 255)},
         19: {"rain": (31, 255, 111, 212), "snow": (132, 196, 255, 255)},
 
-        # Light to moderate regular rainfall
+        # ==========================================
+        # 5. LIGHT TO MODERATE CORES (20 TO 29 dBZ)
+        # Steady showers
+        # ==========================================
         20: {"rain": (0, 255, 0, 216), "snow": (126, 189, 255, 255)},
         21: {"rain": (0, 255, 42, 224), "snow": (119, 183, 255, 255)},
         22: {"rain": (0, 255, 85, 232), "snow": (113, 176, 255, 255)},
@@ -275,7 +269,10 @@ def estimate_pixel_rain_metrics(pixel):
         28: {"rain": (0, 255, 235, 252), "snow": (74, 136, 255, 255)},
         29: {"rain": (0, 255, 244, 255), "snow": (67, 129, 255, 255)},
 
-        # Solid, continuous rain cells
+        # ==========================================
+        # 6. HEAVY SUSTAINED SHOWERS (30 TO 39 dBZ)
+        # Strong localized fronts
+        # ==========================================
         30: {"rain": (0, 208, 255, 255), "snow": (61, 122, 255, 255)},
         31: {"rain": (0, 187, 245, 255), "snow": (54, 115, 255, 255)},
         32: {"rain": (0, 165, 235, 255), "snow": (48, 108, 255, 255)},
@@ -287,7 +284,10 @@ def estimate_pixel_rain_metrics(pixel):
         38: {"rain": (153, 42, 255, 255), "snow": (9, 68, 255, 255)},
         39: {"rain": (204, 24, 255, 255), "snow": (2, 62, 255, 255)},
 
-        # Heavy rain downpours
+        # ==========================================
+        # 7. TORRENTIAL DOWNPOURS (40 TO 49 dBZ)
+        # Orange risk boundaries
+        # ==========================================
         40: {"rain": (255, 255, 0, 255), "snow": (0, 55, 245, 255)},
         41: {"rain": (255, 236, 0, 255), "snow": (0, 48, 235, 255)},
         42: {"rain": (255, 216, 0, 255), "snow": (0, 42, 225, 255)},
@@ -299,7 +299,10 @@ def estimate_pixel_rain_metrics(pixel):
         48: {"rain": (255, 86, 0, 255), "snow": (0, 2, 166, 255)},
         49: {"rain": (255, 61, 0, 255), "snow": (5, 0, 156, 255)},
 
-        # Severe storms and heavy torrential downpours
+        # ==========================================
+        # 8. THUNDERSTORM / HAIL CORE (50 TO 59 dBZ)
+        # Severe weather tracking cells
+        # ==========================================
         50: {"rain": (255, 0, 0, 255), "snow": (11, 0, 146, 255)},
         51: {"rain": (249, 0, 24, 255), "snow": (16, 0, 137, 255)},
         52: {"rain": (243, 0, 49, 255), "snow": (22, 0, 127, 255)},
@@ -311,9 +314,19 @@ def estimate_pixel_rain_metrics(pixel):
         58: {"rain": (164, 0, 255, 255), "snow": (56, 0, 70, 255)},
         59: {"rain": (144, 0, 255, 255), "snow": (62, 0, 60, 255)},
 
-        # Extreme weather / Heavy hail and structural storm cores
-        60: {"rain": (128, 0, 255, 255), "snow": (67, 0, 51, 255)}
+        # ==========================================
+        # 9. EXTENDED CRITICAL SEVERE DATA (60 TO 95 dBZ)
+        # Maximum extreme values / Flash flood hazard scales
+        # ==========================================
+        **{
+            dbz: {
+                "rain": (128, 0, 255, 255),  # Fixed Purple ceiling
+                "snow": (67, 0, 51, 255)     # Deep Plum snow ceiling
+            } 
+            for dbz in range(60, 96)
+        }
     }
+
     for i in range(-32, 61):
         rgba = rainviewer_legacy_rgba.get(i, {}).get("rain", (0, 0, 0, 0))
         if (r, g, b, a) == rgba:
