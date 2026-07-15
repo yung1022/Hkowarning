@@ -344,7 +344,7 @@ def estimate_pixel_rain_metrics(pixel):
 
     for dbz_key, target_rgba in rainviewer_complete_rgba.items():
         # Quick Manhattan distance calculation across R, G, B color channels
-        distance = abs(r - target_rgba[0]) + abs(g - target_rgba[1]) + abs(b - target_rgba[2])
+        distance = abs(r - target_rgba['rain'][0]) + abs(g - target_rgba['rain'][1]) + abs(b - target_rgba['rain'][2])
         if distance < min_distance:
             min_distance = distance
             closest_dbz = float(dbz_key)
@@ -354,7 +354,7 @@ def estimate_pixel_rain_metrics(pixel):
         dbz = closest_dbz
 
     # Return safe background marker for unexpected edge color combinations
-    dez = float('-inf')
+    dbz = float('-inf')
 
 
     return {
