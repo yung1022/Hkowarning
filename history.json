@@ -689,6 +689,17 @@
       "last_seen_time": "2026-08-09T19:40:00+08:00",
       "end_time": "2026-08-10T06:00:49.007997+08:00",
       "duration": "119h 15m"
+    },
+    {
+      "id": "OFF-WHOT-1786336831",
+      "code": "WHOT",
+      "zh_name": "酷熱天氣警告",
+      "en_name": "Very Hot Weather Warning",
+      "issue_time": "2026-08-05T06:45:00+08:00",
+      "expire_time": null,
+      "status": "active",
+      "last_action": "REISSUE",
+      "last_seen_time": "2026-08-10T06:45:00+08:00"
     }
   ],
   "custom_warnings": [
@@ -740,48 +751,68 @@
   "mesoscale_discussions": [
     {
       "id": "20260810-01",
-      "issue_time": "2026-08-10T06:00:49.007997+08:00",
+      "issue_time": "2026-08-10T12:40:31.341217+08:00",
       "status": "active",
       "updates": [
         {
-          "time": "2026-08-10T06:00:49.007997+08:00",
+          "time": "2026-08-10T12:40:31.341217+08:00",
           "coords": [
             [
-              21.3058,
+              20.8089,
+              118.8935
+            ],
+            [
+              20.8685,
+              118.9375
+            ],
+            [
+              20.8685,
+              118.9594
+            ],
+            [
+              20.8486,
+              119.0254
+            ],
+            [
+              20.8089,
               119.1132
             ],
             [
-              21.4449,
-              119.2011
-            ],
-            [
-              21.4648,
-              119.2451
-            ],
-            [
-              21.4051,
+              20.7095,
               119.289
             ],
             [
-              21.3256,
-              119.333
+              20.6896,
+              119.311
             ],
             [
-              21.2859,
+              20.63,
+              119.2451
+            ],
+            [
+              20.6101,
+              119.1572
+            ],
+            [
+              20.6101,
               119.1352
             ],
             [
-              21.2859,
-              119.1132
+              20.63,
+              119.0913
+            ],
+            [
+              20.7691,
+              118.9155
             ]
           ],
           "text": "A mesoscale convective area is developing over Hong Kong with estimated rainfall intensity around 42 mm/h. The cell appears organised enough to warrant close monitoring for nearby coastal and inland impacts.",
           "center": [
-            21.3649,
-            119.229
+            20.7264,
+            119.1116
           ],
           "movement": "N/A",
-          "size": "9 km",
+          "size": "13 km",
           "intensity": "42mm/h",
           "severity": "S3"
         }
@@ -789,52 +820,44 @@
     },
     {
       "id": "20260810-02",
-      "issue_time": "2026-08-10T06:00:49.007997+08:00",
+      "issue_time": "2026-08-10T12:40:31.341217+08:00",
       "status": "active",
       "updates": [
         {
-          "time": "2026-08-10T06:00:49.007997+08:00",
+          "time": "2026-08-10T12:40:31.341217+08:00",
           "coords": [
             [
-              21.4449,
-              119.0034
+              20.9679,
+              119.3549
             ],
             [
-              21.4846,
-              119.0254
+              21.0076,
+              119.3989
             ],
             [
-              21.5045,
-              119.0913
+              21.107,
+              119.6406
             ],
             [
-              21.5045,
-              119.1352
+              21.0673,
+              119.7724
             ],
             [
-              21.4449,
-              119.1572
+              21.0275,
+              119.7724
             ],
             [
-              21.425,
-              119.1352
-            ],
-            [
-              21.3853,
-              119.0254
-            ],
-            [
-              21.425,
-              119.0034
+              20.8884,
+              119.7285
             ]
           ],
           "text": "A mesoscale convective area is developing over Hong Kong with estimated rainfall intensity around 42 mm/h. The cell appears organised enough to warrant close monitoring for nearby coastal and inland impacts.",
           "center": [
-            21.45,
-            119.0792
+            20.9979,
+            119.5862
           ],
           "movement": "N/A",
-          "size": "8 km",
+          "size": "11 km",
           "intensity": "42mm/h",
           "severity": "S3"
         }
@@ -842,45 +865,49 @@
     },
     {
       "id": "20260810-03",
-      "issue_time": "2026-08-10T06:00:49.007997+08:00",
+      "issue_time": "2026-08-10T12:40:31.341217+08:00",
       "status": "active",
       "updates": [
         {
-          "time": "2026-08-10T06:00:49.007997+08:00",
+          "time": "2026-08-10T12:40:31.341217+08:00",
           "coords": [
             [
-              21.743,
-              119.333
+              18.5232,
+              109.2475
             ],
             [
-              21.7629,
-              119.4428
+              18.5232,
+              109.2695
             ],
             [
-              21.7629,
-              119.4648
+              18.4835,
+              109.3574
             ],
             [
-              21.7231,
-              119.4868
+              18.4239,
+              109.4013
             ],
             [
-              21.6238,
-              119.4648
+              18.404,
+              109.4013
             ],
             [
-              21.6436,
-              119.3549
+              18.3444,
+              109.3794
             ],
             [
-              21.7231,
-              119.333
+              18.404,
+              109.2695
+            ],
+            [
+              18.4636,
+              109.2475
             ]
           ],
           "text": "A mesoscale convective area is developing over Hong Kong with estimated rainfall intensity around 42 mm/h. The cell appears organised enough to warrant close monitoring for nearby coastal and inland impacts.",
           "center": [
-            21.7059,
-            119.4135
+            18.4425,
+            109.3196
           ],
           "movement": "N/A",
           "size": "8 km",
@@ -891,48 +918,48 @@
     },
     {
       "id": "20260810-04",
-      "issue_time": "2026-08-10T06:00:49.007997+08:00",
+      "issue_time": "2026-08-10T12:40:31.341217+08:00",
       "status": "active",
       "updates": [
         {
-          "time": "2026-08-10T06:00:49.007997+08:00",
+          "time": "2026-08-10T12:40:31.341217+08:00",
           "coords": [
             [
-              21.7231,
-              119.2231
+              18.9207,
+              108.874
             ],
             [
-              21.8225,
-              119.289
+              18.9406,
+              108.9399
             ],
             [
-              21.8424,
-              119.311
+              18.9406,
+              108.9619
             ],
             [
-              21.8424,
-              119.333
+              18.9207,
+              108.9839
             ],
             [
-              21.7828,
-              119.333
+              18.881,
+              108.9619
             ],
             [
-              21.6834,
-              119.311
+              18.8412,
+              108.9179
             ],
             [
-              21.6834,
-              119.2231
+              18.881,
+              108.874
             ]
           ],
           "text": "A mesoscale convective area is developing over Hong Kong with estimated rainfall intensity around 42 mm/h. The cell appears organised enough to warrant close monitoring for nearby coastal and inland impacts.",
           "center": [
-            21.7579,
-            119.2826
+            18.8979,
+            108.9245
           ],
           "movement": "N/A",
-          "size": "7 km",
+          "size": "6 km",
           "intensity": "42mm/h",
           "severity": "S3"
         }
@@ -940,49 +967,45 @@
     },
     {
       "id": "20260810-05",
-      "issue_time": "2026-08-10T06:00:49.007997+08:00",
+      "issue_time": "2026-08-10T12:40:31.341217+08:00",
       "status": "active",
       "updates": [
         {
-          "time": "2026-08-10T06:00:49.007997+08:00",
+          "time": "2026-08-10T12:40:31.341217+08:00",
           "coords": [
             [
-              21.5244,
-              118.8715
+              20.7493,
+              119.6406
             ],
             [
-              21.5443,
-              118.8935
+              20.8089,
+              119.6626
             ],
             [
-              21.5641,
-              118.9375
+              20.8089,
+              119.6845
             ],
             [
-              21.5641,
-              118.9594
+              20.789,
+              119.7065
             ],
             [
-              21.5443,
-              118.9594
+              20.7493,
+              119.7285
             ],
             [
-              21.4846,
-              118.9375
+              20.7294,
+              119.7285
             ],
             [
-              21.4648,
-              118.9155
-            ],
-            [
-              21.5045,
-              118.8715
+              20.7294,
+              119.6406
             ]
           ],
           "text": "A mesoscale convective area is developing over Hong Kong with estimated rainfall intensity around 42 mm/h. The cell appears organised enough to warrant close monitoring for nearby coastal and inland impacts.",
           "center": [
-            21.5189,
-            118.9167
+            20.7621,
+            119.6832
           ],
           "movement": "N/A",
           "size": "6 km",
@@ -993,82 +1016,40 @@
     },
     {
       "id": "20260810-06",
-      "issue_time": "2026-08-10T06:00:49.007997+08:00",
+      "issue_time": "2026-08-10T12:40:31.341217+08:00",
       "status": "active",
       "updates": [
         {
-          "time": "2026-08-10T06:00:49.007997+08:00",
+          "time": "2026-08-10T12:40:31.341217+08:00",
           "coords": [
             [
-              21.8623,
-              119.4868
+              19.4375,
+              109.3794
             ],
             [
-              21.8623,
-              119.5088
+              19.4971,
+              109.4013
             ],
             [
-              21.8424,
-              119.5747
+              19.4971,
+              109.5332
             ],
             [
-              21.8225,
-              119.5747
+              19.4574,
+              109.5332
             ],
             [
-              21.7828,
-              119.5307
-            ],
-            [
-              21.8026,
-              119.4868
+              19.4375,
+              109.4013
             ]
           ],
           "text": "A mesoscale convective area is developing over Hong Kong with estimated rainfall intensity around 42 mm/h. The cell appears organised enough to warrant close monitoring for nearby coastal and inland impacts.",
           "center": [
-            21.8275,
-            119.5225
+            19.4761,
+            109.4685
           ],
           "movement": "N/A",
           "size": "6 km",
-          "intensity": "42mm/h",
-          "severity": "S3"
-        },
-        {
-          "time": "2026-08-10T06:00:49.007997+08:00",
-          "coords": [
-            [
-              21.7231,
-              119.5527
-            ],
-            [
-              21.7828,
-              119.5747
-            ],
-            [
-              21.8424,
-              119.6186
-            ],
-            [
-              21.7828,
-              119.6406
-            ],
-            [
-              21.7629,
-              119.6406
-            ],
-            [
-              21.7231,
-              119.5966
-            ]
-          ],
-          "text": "A mesoscale convective area is developing over Hong Kong with estimated rainfall intensity around 42 mm/h. The cell appears organised enough to warrant close monitoring for nearby coastal and inland impacts.",
-          "center": [
-            21.7686,
-            119.6061
-          ],
-          "movement": "N/A",
-          "size": "5 km",
           "intensity": "42mm/h",
           "severity": "S3"
         }
@@ -1076,82 +1057,48 @@
     },
     {
       "id": "20260810-07",
-      "issue_time": "2026-08-10T06:00:49.007997+08:00",
+      "issue_time": "2026-08-10T12:40:31.341217+08:00",
       "status": "active",
       "updates": [
         {
-          "time": "2026-08-10T06:00:49.007997+08:00",
+          "time": "2026-08-10T12:40:31.341217+08:00",
           "coords": [
             [
-              21.7629,
-              119.0693
+              20.7095,
+              118.9375
             ],
             [
-              21.8026,
-              119.1132
+              20.7294,
+              118.9594
             ],
             [
-              21.7629,
-              119.1572
-            ],
-            [
-              21.743,
-              119.1572
-            ],
-            [
-              21.7033,
-              119.0913
-            ],
-            [
-              21.7231,
-              119.0693
-            ]
-          ],
-          "text": "A mesoscale convective area is developing over Hong Kong with estimated rainfall intensity around 20 mm/h. The cell appears organised enough to warrant close monitoring for nearby coastal and inland impacts.",
-          "center": [
-            21.751,
-            119.1074
-          ],
-          "movement": "N/A",
-          "size": "5 km",
-          "intensity": "20mm/h",
-          "severity": "S1"
-        },
-        {
-          "time": "2026-08-10T06:00:49.007997+08:00",
-          "coords": [
-            [
-              21.8026,
+              20.7294,
               118.9814
             ],
             [
-              21.8026,
+              20.7095,
               119.0034
             ],
             [
-              21.7629,
+              20.6499,
               119.0254
             ],
             [
-              21.743,
-              119.0254
-            ],
-            [
-              21.743,
+              20.63,
               119.0034
             ],
             [
-              21.7629,
-              118.9814
+              20.6698,
+              118.9594
             ]
           ],
           "text": "A mesoscale convective area is developing over Hong Kong with estimated rainfall intensity around 42 mm/h. The cell appears organised enough to warrant close monitoring for nearby coastal and inland impacts.",
           "center": [
-            21.7717,
-            119.0009
+            20.682,
+            118.9814
           ],
           "movement": "N/A",
-          "size": "4 km",
+          "size": "5 km",
           "intensity": "42mm/h",
           "severity": "S3"
         }
@@ -1159,41 +1106,127 @@
     },
     {
       "id": "20260810-08",
-      "issue_time": "2026-08-10T06:00:49.007997+08:00",
+      "issue_time": "2026-08-10T12:40:31.341217+08:00",
       "status": "active",
       "updates": [
         {
-          "time": "2026-08-10T06:00:49.007997+08:00",
+          "time": "2026-08-10T12:40:31.341217+08:00",
           "coords": [
             [
-              21.5045,
-              119.3989
+              18.6226,
+              109.0278
             ],
             [
-              21.5045,
-              119.4209
+              18.6226,
+              109.0717
             ],
             [
-              21.4846,
-              119.4428
+              18.5829,
+              109.0937
             ],
             [
-              21.4449,
-              119.4428
+              18.563,
+              109.0937
             ],
             [
-              21.4449,
-              119.4209
+              18.563,
+              109.0498
             ],
             [
-              21.4846,
-              119.3989
+              18.5829,
+              109.0278
             ]
           ],
           "text": "A mesoscale convective area is developing over Hong Kong with estimated rainfall intensity around 42 mm/h. The cell appears organised enough to warrant close monitoring for nearby coastal and inland impacts.",
           "center": [
-            21.4758,
-            119.4233
+            18.5928,
+            109.0571
+          ],
+          "movement": "N/A",
+          "size": "5 km",
+          "intensity": "42mm/h",
+          "severity": "S3"
+        }
+      ]
+    },
+    {
+      "id": "20260810-09",
+      "issue_time": "2026-08-10T12:40:31.341217+08:00",
+      "status": "active",
+      "updates": [
+        {
+          "time": "2026-08-10T12:40:31.341217+08:00",
+          "coords": [
+            [
+              19.4971,
+              109.6211
+            ],
+            [
+              19.4375,
+              109.687
+            ],
+            [
+              19.3977,
+              109.665
+            ],
+            [
+              19.3977,
+              109.643
+            ],
+            [
+              19.4375,
+              109.6211
+            ]
+          ],
+          "text": "A mesoscale convective area is developing over Hong Kong with estimated rainfall intensity around 42 mm/h. The cell appears organised enough to warrant close monitoring for nearby coastal and inland impacts.",
+          "center": [
+            19.4392,
+            109.6449
+          ],
+          "movement": "N/A",
+          "size": "5 km",
+          "intensity": "42mm/h",
+          "severity": "S3"
+        }
+      ]
+    },
+    {
+      "id": "20260810-10",
+      "issue_time": "2026-08-10T12:40:31.341217+08:00",
+      "status": "active",
+      "updates": [
+        {
+          "time": "2026-08-10T12:40:31.341217+08:00",
+          "coords": [
+            [
+              21.0474,
+              118.8276
+            ],
+            [
+              21.0474,
+              118.8496
+            ],
+            [
+              21.0275,
+              118.9155
+            ],
+            [
+              21.0076,
+              118.9155
+            ],
+            [
+              21.0076,
+              118.8496
+            ],
+            [
+              21.0275,
+              118.8276
+            ]
+          ],
+          "text": "A mesoscale convective area is developing over Hong Kong with estimated rainfall intensity around 42 mm/h. The cell appears organised enough to warrant close monitoring for nearby coastal and inland impacts.",
+          "center": [
+            21.0239,
+            118.8696
           ],
           "movement": "N/A",
           "size": "4 km",
@@ -1203,100 +1236,189 @@
       ]
     },
     {
-      "id": "20260810-09",
-      "issue_time": "2026-08-10T06:00:49.007997+08:00",
+      "id": "20260810-11",
+      "issue_time": "2026-08-10T12:40:31.341217+08:00",
       "status": "active",
       "updates": [
         {
-          "time": "2026-08-10T06:00:49.007997+08:00",
+          "time": "2026-08-10T12:40:31.341217+08:00",
           "coords": [
             [
-              21.5641,
+              21.2064,
+              119.4209
+            ],
+            [
+              21.2064,
+              119.4648
+            ],
+            [
+              21.1468,
+              119.4648
+            ],
+            [
+              21.1468,
+              119.4428
+            ],
+            [
+              21.1865,
+              119.4209
+            ]
+          ],
+          "text": "A mesoscale convective area is developing over Hong Kong with estimated rainfall intensity around 42 mm/h. The cell appears organised enough to warrant close monitoring for nearby coastal and inland impacts.",
+          "center": [
+            21.1821,
+            119.4453
+          ],
+          "movement": "N/A",
+          "size": "4 km",
+          "intensity": "42mm/h",
+          "severity": "S3"
+        }
+      ]
+    },
+    {
+      "id": "20260810-12",
+      "issue_time": "2026-08-10T12:40:31.341217+08:00",
+      "status": "active",
+      "updates": [
+        {
+          "time": "2026-08-10T12:40:31.341217+08:00",
+          "coords": [
+            [
+              21.1468,
+              119.6845
+            ],
+            [
+              21.1666,
+              119.7724
+            ],
+            [
+              21.1269,
+              119.7724
+            ],
+            [
+              21.1269,
+              119.6845
+            ]
+          ],
+          "text": "A mesoscale convective area is developing over Hong Kong with estimated rainfall intensity around 42 mm/h. The cell appears organised enough to warrant close monitoring for nearby coastal and inland impacts.",
+          "center": [
+            21.1368,
+            119.734
+          ],
+          "movement": "N/A",
+          "size": "4 km",
+          "intensity": "42mm/h",
+          "severity": "S3"
+        }
+      ]
+    },
+    {
+      "id": "20260810-13",
+      "issue_time": "2026-08-10T12:40:31.341217+08:00",
+      "status": "active",
+      "updates": [
+        {
+          "time": "2026-08-10T12:40:31.341217+08:00",
+          "coords": [
+            [
+              20.7691,
               119.5088
             ],
             [
-              21.5641,
+              20.789,
               119.5307
             ],
             [
-              21.5443,
+              20.789,
+              119.5527
+            ],
+            [
+              20.7691,
+              119.5527
+            ],
+            [
+              20.7493,
               119.5307
             ],
             [
-              21.5443,
+              20.7493,
               119.5088
             ]
           ],
           "text": "A mesoscale convective area is developing over Hong Kong with estimated rainfall intensity around 42 mm/h. The cell appears organised enough to warrant close monitoring for nearby coastal and inland impacts.",
           "center": [
-            21.5542,
-            119.5197
+            20.7691,
+            119.5307
           ],
           "movement": "N/A",
           "size": "3 km",
           "intensity": "42mm/h",
           "severity": "S3"
-        },
-        {
-          "time": "2026-08-10T06:00:49.007997+08:00",
-          "coords": [
-            [
-              21.6635,
-              119.5307
-            ],
-            [
-              21.6436,
-              119.5527
-            ],
-            [
-              21.6436,
-              119.5307
-            ]
-          ],
-          "text": "A mesoscale convective area is developing over Hong Kong with estimated rainfall intensity around 20 mm/h. The cell appears organised enough to warrant close monitoring for nearby coastal and inland impacts.",
-          "center": [
-            21.6503,
-            119.5381
-          ],
-          "movement": "N/A",
-          "size": "2 km",
-          "intensity": "20mm/h",
-          "severity": "S1"
         }
       ]
     },
     {
-      "id": "20260810-10",
-      "issue_time": "2026-08-10T06:00:49.007997+08:00",
+      "id": "20260810-14",
+      "issue_time": "2026-08-10T12:40:31.341217+08:00",
       "status": "active",
       "updates": [
         {
-          "time": "2026-08-10T06:00:49.007997+08:00",
+          "time": "2026-08-10T12:40:31.341217+08:00",
           "coords": [
             [
-              25.8969,
-              113.3344
+              18.404,
+              109.4453
             ],
             [
-              25.8969,
-              113.3564
+              18.3642,
+              109.4673
             ],
             [
-              25.8771,
-              113.3564
-            ],
-            [
-              25.8771,
-              113.3344
+              18.3444,
+              109.4453
             ]
           ],
           "text": "A mesoscale convective area is developing over Hong Kong with estimated rainfall intensity around 42 mm/h. The cell appears organised enough to warrant close monitoring for nearby coastal and inland impacts.",
           "center": [
-            25.887,
-            113.3454
+            18.3722,
+            109.4497
           ],
           "movement": "N/A",
           "size": "3 km",
+          "intensity": "42mm/h",
+          "severity": "S3"
+        }
+      ]
+    },
+    {
+      "id": "20260810-15",
+      "issue_time": "2026-08-10T12:40:31.341217+08:00",
+      "status": "active",
+      "updates": [
+        {
+          "time": "2026-08-10T12:40:31.341217+08:00",
+          "coords": [
+            [
+              18.9207,
+              109.4233
+            ],
+            [
+              18.9009,
+              109.4453
+            ],
+            [
+              18.9009,
+              109.4233
+            ]
+          ],
+          "text": "A mesoscale convective area is developing over Hong Kong with estimated rainfall intensity around 42 mm/h. The cell appears organised enough to warrant close monitoring for nearby coastal and inland impacts.",
+          "center": [
+            18.9075,
+            109.4306
+          ],
+          "movement": "N/A",
+          "size": "2 km",
           "intensity": "42mm/h",
           "severity": "S3"
         }
