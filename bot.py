@@ -1166,7 +1166,6 @@ def main():
                         })
                     msg = build_auto_meso_message(meso_id, rainviewer_result.get('area') or 'Hong Kong', list(cluster_center), size_km, auto_text, intensity=cluster_intensity, severity=calculate_severity(size_km, f"{cluster_intensity}mm/h"))
                     print(msg)
-                    messages.append(f"🔄 **Mesoscale Discussion Updated: {meso_id}**\n{m_data['text']}")
                 else:
                     meso_id = provided_auto_id if provided_auto_id and idx == 1 else generate_meso_id(history, now)
                     current_mesos[meso_id] = {
@@ -1186,7 +1185,6 @@ def main():
                     })
                     msg = build_auto_meso_message(meso_id, rainviewer_result.get('area') or 'Hong Kong', list(cluster_center), size_km, auto_text, intensity=cluster_intensity, severity=calculate_severity(size_km, f"{cluster_intensity}mm/h"))
                     print(msg)
-                    messages.append(f"🌧️ **AI Mesoscale Discussion Issued: {meso_id}**\n{auto_text}")
     
     # 1. Mesoscale Discussion Logic (With Timeline Updates)
     if meso_action == 'ISSUE' and meso_id:
@@ -1216,15 +1214,7 @@ def main():
             }]
         })
         
-        msg = f"🌪️ **Mesoscale Discussion Issued: {meso_id}**\n"
-        if meso_severity: msg += f"🚨 **Severity Category:** {meso_severity}\n"
-        if meso_center: msg += f"📍 **Center:** {meso_center}\n"
-        if meso_movement: msg += f"💨 **Movement:** {meso_movement}\n"
-        if meso_size: msg += f"📏 **Size:** {meso_size}\n"
-        if meso_intensity: msg += f"🌧️ **Intensity:** {meso_intensity}\n"
-        if meso_text: msg += f"\n{meso_text}\n"
-        msg += f"\n*(Area displayed on dashboard map)*"
-        messages.append(msg)
+
 
     elif meso_action == 'UPDATE' and meso_id:
         if meso_id in current_mesos:
@@ -1262,20 +1252,11 @@ def main():
                     "severity": m_data.get('severity'), "text": m_data.get('text')
                 })
                 
-            msg = f"🔄 **Mesoscale Discussion Updated: {meso_id}**\n"
-            if m_data.get('severity'): msg += f"🚨 **Severity Category:** {m_data['severity']}\n"
-            if m_data.get('center'): msg += f"📍 **Center:** {m_data['center']}\n"
-            if m_data.get('movement'): msg += f"💨 **Movement:** {m_data['movement']}\n"
-            if m_data.get('size'): msg += f"📏 **Size:** {m_data['size']}\n"
-            if m_data.get('intensity'): msg += f"🌧️ **Intensity:** {m_data['intensity']}\n"
-            if m_data.get('text'): msg += f"\n{m_data['text']}\n"
-            msg += f"\n*(Area and forecast line updated on dashboard map)*"
-            messages.append(msg)
+
 
     elif meso_action == 'CANCEL' and meso_id:
         if meso_id in current_mesos:
             del current_mesos[meso_id]
-            messages.append(f"🛑 **Mesoscale Discussion Cancelled: {meso_id}**")
         hist_item = get_active_history(history['mesoscale_discussions'], meso_id, key_name='id')
         if hist_item:
             hist_item['status'] = 'cancelled'
