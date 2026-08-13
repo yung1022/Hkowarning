@@ -329,14 +329,24 @@ def estimate_pixel_rain_metrics(pixel):
 
     # 1. Instantly skip empty spatial regions with no rain cover
     if a == 0 or (r == 255 and g == 255 and b == 255):
-        return float('-inf')
+        return {
+            'brightness': 0,
+            'color_span': 0,
+            'dbz': float('-inf'),
+            'rain_mm_h': 0.0,
+        }
 
     current_rgba = (r, g, b, a)
     
     # 2. Fast-pass exact checking step 
     for dbz_key, target_rgba in rainviewer_complete_rgba.items():
         if current_rgba == target_rgba:
-            return float(dbz_key)
+            return {
+                'brightness': brightness,
+                'color_span': color_span,
+                'dbz': float(dbz_key),
+                'rain_mm_h': dbz_to_mmh(float(dbz_key)),
+            }
 
     # 3. Soft-clamp antialiased edge pixels mathematically (Silences the 50,000+ loop errors)
     closest_dbz = float('-inf')
