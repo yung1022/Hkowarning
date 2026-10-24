@@ -1,5 +1,15 @@
 {
-  "official": {},
+  "official": {
+    "WFIRE": {
+      "name": "Fire Danger Warning",
+      "code": "WFIREY",
+      "type": "Yellow",
+      "actionCode": "ISSUE",
+      "issueTime": "2026-10-25T06:00:00+08:00",
+      "updateTime": "2026-10-25T06:00:00+08:00",
+      "tc_name": "火災危險警告"
+    }
+  },
   "custom": {
     "Red Rainstorm Watch": {
       "type": "Red Rainstorm Watch",
@@ -12,5 +22,33 @@
     "red": "1-5%",
     "black": ""
   },
-  "mesoscale": {}
+  "mesoscale": {
+    "20261025-01": {
+      "id": "20261025-01",
+      "issueTime": "2026-10-25T06:00:46.811710+08:00",
+      "coords": [
+        [
+          22.2002,
+          114.1694
+        ],
+        [
+          22.205199999999998,
+          114.17439999999999
+        ],
+        [
+          22.205199999999998,
+          114.1644
+        ]
+      ],
+      "text": "A mesoscale convective area is developing over Hong Kong with estimated rainfall intensity around 20 mm/h. The cell appears organised enough to warrant close monitoring for nearby coastal and inland impacts.",
+      "center": [
+        22.2002,
+        114.1694
+      ],
+      "movement": "N/A",
+      "size": "0 km",
+      "intensity": "20mm/h",
+      "severity": "S1"
+    }
+  }
 }

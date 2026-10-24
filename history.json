@@ -1674,6 +1674,15 @@
       "status": "cancelled",
       "end_time": "2026-10-23T12:45:00+08:00",
       "duration": "3h 0m"
+    },
+    {
+      "id": "OFF-WFIRE-1792879246",
+      "code": "WFIRE",
+      "zh_name": "火災危險警告",
+      "en_name": "Fire Danger Warning",
+      "issue_time": "2026-10-25T06:00:00+08:00",
+      "expire_time": null,
+      "status": "active"
     }
   ],
   "custom_warnings": [
@@ -1753,7 +1762,41 @@
       "status": "active"
     }
   ],
-  "mesoscale_discussions": [],
+  "mesoscale_discussions": [
+    {
+      "id": "20261025-01",
+      "issue_time": "2026-10-25T06:00:46.811710+08:00",
+      "status": "active",
+      "updates": [
+        {
+          "time": "2026-10-25T06:00:46.811710+08:00",
+          "coords": [
+            [
+              22.2002,
+              114.1694
+            ],
+            [
+              22.205199999999998,
+              114.17439999999999
+            ],
+            [
+              22.205199999999998,
+              114.1644
+            ]
+          ],
+          "text": "A mesoscale convective area is developing over Hong Kong with estimated rainfall intensity around 20 mm/h. The cell appears organised enough to warrant close monitoring for nearby coastal and inland impacts.",
+          "center": [
+            22.2002,
+            114.1694
+          ],
+          "movement": "N/A",
+          "size": "0 km",
+          "intensity": "20mm/h",
+          "severity": "S1"
+        }
+      ]
+    }
+  ],
   "announcements": [
     {
       "time": "2026-07-14T10:06:12.847668+08:00",
