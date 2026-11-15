@@ -1783,7 +1783,9 @@
       "en_name": "Fire Danger Warning",
       "issue_time": "2026-11-15T06:00:00+08:00",
       "expire_time": null,
-      "status": "active"
+      "status": "cancelled",
+      "end_time": "2026-11-15T18:00:00+08:00",
+      "duration": "12h 0m"
     }
   ],
   "custom_warnings": [
@@ -1866,33 +1868,70 @@
   "mesoscale_discussions": [
     {
       "id": "20261115-01",
-      "issue_time": "2026-11-15T17:55:24.937709+08:00",
+      "issue_time": "2026-11-15T18:00:46.682850+08:00",
       "status": "active",
       "updates": [
         {
-          "time": "2026-11-15T17:55:24.937709+08:00",
+          "time": "2026-11-15T18:00:46.682850+08:00",
           "coords": [
             [
-              21.3853,
+              21.2064,
+              119.6845
+            ],
+            [
+              21.2064,
+              119.7065
+            ],
+            [
+              21.1865,
+              119.7065
+            ],
+            [
+              21.1865,
+              119.6845
+            ]
+          ],
+          "text": "A mesoscale convective area is developing over Hong Kong with estimated rainfall intensity around 20 mm/h. The cell appears organised enough to warrant close monitoring for nearby coastal and inland impacts.",
+          "center": [
+            21.1965,
+            119.6955
+          ],
+          "movement": "N/A",
+          "size": "3 km",
+          "intensity": "20mm/h",
+          "severity": "S1"
+        }
+      ]
+    },
+    {
+      "id": "20261115-02",
+      "issue_time": "2026-11-15T18:00:46.682850+08:00",
+      "status": "active",
+      "updates": [
+        {
+          "time": "2026-11-15T18:00:46.682850+08:00",
+          "coords": [
+            [
+              21.5244,
               119.7505
             ],
             [
-              21.3853,
+              21.5244,
               119.7724
             ],
             [
-              21.3455,
+              21.5045,
               119.7724
             ],
             [
-              21.3654,
+              21.5045,
               119.7505
             ]
           ],
           "text": "A mesoscale convective area is developing over Hong Kong with estimated rainfall intensity around 20 mm/h. The cell appears organised enough to warrant close monitoring for nearby coastal and inland impacts.",
           "center": [
-            21.3694,
-            119.7636
+            21.5145,
+            119.7614
           ],
           "movement": "N/A",
           "size": "3 km",
