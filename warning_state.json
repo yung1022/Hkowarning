@@ -4,9 +4,9 @@
       "name": "Fire Danger Warning",
       "code": "WFIRER",
       "type": "Red",
-      "actionCode": "ISSUE",
+      "actionCode": "CANCEL",
       "issueTime": "2026-11-21T06:00:00+08:00",
-      "updateTime": "2026-11-21T06:00:00+08:00",
+      "updateTime": "2026-11-21T23:50:00+08:00",
       "tc_name": "火災危險警告"
     }
   },
@@ -25,28 +25,36 @@
   "mesoscale": {
     "20261121-01": {
       "id": "20261121-01",
-      "issueTime": "2026-11-21T23:45:34.294980+08:00",
+      "issueTime": "2026-11-21T23:50:38.911038+08:00",
       "coords": [
         [
-          20.5505,
-          113.9277
+          17.6686,
+          111.6425
         ],
         [
-          20.5306,
-          113.9497
+          17.6686,
+          111.6645
         ],
         [
-          20.5306,
-          113.9277
+          17.6487,
+          111.6865
+        ],
+        [
+          17.6289,
+          111.6645
+        ],
+        [
+          17.6487,
+          111.6425
         ]
       ],
       "text": "A mesoscale convective area is developing over Hong Kong with estimated rainfall intensity around 20 mm/h. The cell appears organised enough to warrant close monitoring for nearby coastal and inland impacts.",
       "center": [
-        20.5373,
-        113.935
+        17.6527,
+        111.6601
       ],
       "movement": "N/A",
-      "size": "2 km",
+      "size": "3 km",
       "intensity": "20mm/h",
       "severity": "S1"
     }

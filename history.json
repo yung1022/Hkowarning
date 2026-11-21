@@ -1818,7 +1818,9 @@
       "en_name": "Fire Danger Warning",
       "issue_time": "2026-11-21T06:00:00+08:00",
       "expire_time": null,
-      "status": "active"
+      "status": "cancelled",
+      "end_time": "2026-11-21T23:50:00+08:00",
+      "duration": "17h 50m"
     }
   ],
   "custom_warnings": [
@@ -1901,32 +1903,40 @@
   "mesoscale_discussions": [
     {
       "id": "20261121-01",
-      "issue_time": "2026-11-21T23:45:34.294980+08:00",
+      "issue_time": "2026-11-21T23:50:38.911038+08:00",
       "status": "active",
       "updates": [
         {
-          "time": "2026-11-21T23:45:34.294980+08:00",
+          "time": "2026-11-21T23:50:38.911038+08:00",
           "coords": [
             [
-              20.5505,
-              113.9277
+              17.6686,
+              111.6425
             ],
             [
-              20.5306,
-              113.9497
+              17.6686,
+              111.6645
             ],
             [
-              20.5306,
-              113.9277
+              17.6487,
+              111.6865
+            ],
+            [
+              17.6289,
+              111.6645
+            ],
+            [
+              17.6487,
+              111.6425
             ]
           ],
           "text": "A mesoscale convective area is developing over Hong Kong with estimated rainfall intensity around 20 mm/h. The cell appears organised enough to warrant close monitoring for nearby coastal and inland impacts.",
           "center": [
-            20.5373,
-            113.935
+            17.6527,
+            111.6601
           ],
           "movement": "N/A",
-          "size": "2 km",
+          "size": "3 km",
           "intensity": "20mm/h",
           "severity": "S1"
         }
